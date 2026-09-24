@@ -99,9 +99,15 @@ async function callGemini(prompt: string, schema: object): Promise<unknown> {
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: SYSTEM }] },
           contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: "application/json", responseSchema: schema, temperature: 0.9 },
+          generationConfig: {
+            responseMimeType: "application/json",
+            responseSchema: schema,
+            temperature: 0.9,
+            // Low thinking keeps each call to a few seconds, well inside Vercel's 60s function limit.
+            thinkingConfig: { thinkingLevel: "low" },
+          },
         }),
-        signal: AbortSignal.timeout(45_000),
+        signal: AbortSignal.timeout(22_000),
       });
       if (!res.ok) throw new Error(`${model}: HTTP ${res.status} ${(await res.text()).slice(0, 200)}`);
       const json = await res.json();

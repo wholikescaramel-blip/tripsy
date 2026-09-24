@@ -106,7 +106,9 @@ async function producePlans(b: TripBundle, dates: DatesResult, count: number, av
   const good: PlanDraft[] = [];
   const rejected: { draft: PlanDraft; reason: string }[] = [];
   let source: PlanSource = "sample";
-  for (let attempt = 0; attempt < 3 && good.length < count; attempt++) {
+  const started = Date.now();
+  // Retry for rule-breaking plans, but stop early so the request stays inside Vercel's time limit.
+  for (let attempt = 0; attempt < 3 && good.length < count && Date.now() - started < 25_000; attempt++) {
     const out = await generatePlans(ctx, count - good.length, [...avoid], [...feedback]);
     source = out.source;
     if (!out.plans.length) break;
