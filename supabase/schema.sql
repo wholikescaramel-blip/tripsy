@@ -1,5 +1,7 @@
 -- Tripsy schema. Paste this whole file into Supabase → SQL Editor → Run (once).
 -- Safe to re-run: it drops and recreates everything (all data is lost).
+-- Supabase will warn about "destructive operations" — that's the DROP below, fine on a new project.
+-- Just click Run. Don't pick "Run and enable RLS": RLS is already enabled below, and that option rewrites the SQL.
 
 create extension if not exists pgcrypto;
 
@@ -22,6 +24,7 @@ create table trips (
   is_demo boolean not null default false,
   created_at timestamptz not null default now()
 );
+alter table trips enable row level security;
 
 create table members (
   id uuid primary key default gen_random_uuid(),
@@ -35,6 +38,7 @@ create table members (
   updated_at timestamptz,
   confirmed_at timestamptz
 );
+alter table members enable row level security;
 create index on members(trip_id);
 
 create table availability (
@@ -45,6 +49,7 @@ create table availability (
   maybe_known_by date,
   primary key (member_id, day)
 );
+alter table availability enable row level security;
 create index on availability(trip_id);
 
 create table preferences (
@@ -57,6 +62,7 @@ create table preferences (
   veto_notes text not null default '',
   wishes text not null default ''
 );
+alter table preferences enable row level security;
 create index on preferences(trip_id);
 
 -- Private. No read policy at all: only the security-definer functions below touch it.
@@ -65,6 +71,7 @@ create table member_budgets (
   budget_min int not null,
   budget_max int not null
 );
+alter table member_budgets enable row level security;
 
 create table plans (
   id uuid primary key default gen_random_uuid(),
@@ -89,6 +96,7 @@ create table plans (
   status_reason text,
   created_at timestamptz not null default clock_timestamp()
 );
+alter table plans enable row level security;
 create index on plans(trip_id);
 
 create table swipes (
@@ -100,6 +108,7 @@ create table swipes (
   updated_at timestamptz not null default now(),
   primary key (plan_id, member_id)
 );
+alter table swipes enable row level security;
 create index on swipes(trip_id);
 
 create table changes (
@@ -110,6 +119,7 @@ create table changes (
   summary text not null,
   created_at timestamptz not null default clock_timestamp()
 );
+alter table changes enable row level security;
 create index on changes(trip_id);
 
 create table nudge_log (
@@ -119,18 +129,11 @@ create table nudge_log (
   sent_at timestamptz not null default now(),
   primary key (member_id, nudge_kind)
 );
-
--- Row level security: the app only has the public anon key, so everything is open
--- to it EXCEPT member_budgets, which has RLS on and no policies (= nobody can read it).
-alter table trips enable row level security;
-alter table members enable row level security;
-alter table availability enable row level security;
-alter table preferences enable row level security;
-alter table member_budgets enable row level security;
-alter table plans enable row level security;
-alter table swipes enable row level security;
-alter table changes enable row level security;
 alter table nudge_log enable row level security;
+
+-- Row level security is enabled on every table right after it is created (above).
+-- The app only has the public key, so policies open every table to it EXCEPT
+-- member_budgets, which has RLS on and no policies (= nobody can read it).
 
 do $$
 declare t text;
