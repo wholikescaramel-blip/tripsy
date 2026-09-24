@@ -46,9 +46,9 @@ create table availability (
   member_id uuid not null references members(id) on delete cascade,
   day date not null,
   status text not null check (status in ('free', 'busy', 'maybe')),
-  maybe_known_by date,
-  primary key (member_id, day)
+  maybe_known_by date
 );
+alter table availability add primary key (member_id, day);
 alter table availability enable row level security;
 create index on availability(trip_id);
 
@@ -105,9 +105,9 @@ create table swipes (
   member_id uuid not null references members(id) on delete cascade,
   decision text not null check (decision in ('accept', 'decline')),
   reason text,
-  updated_at timestamptz not null default now(),
-  primary key (plan_id, member_id)
+  updated_at timestamptz not null default now()
 );
+alter table swipes add primary key (plan_id, member_id);
 alter table swipes enable row level security;
 create index on swipes(trip_id);
 
@@ -126,9 +126,9 @@ create table nudge_log (
   trip_id uuid not null references trips(id) on delete cascade,
   member_id uuid not null references members(id) on delete cascade,
   nudge_kind text not null,
-  sent_at timestamptz not null default now(),
-  primary key (member_id, nudge_kind)
+  sent_at timestamptz not null default now()
 );
+alter table nudge_log add primary key (member_id, nudge_kind);
 alter table nudge_log enable row level security;
 
 -- Row level security is enabled on every table right after it is created (above).
