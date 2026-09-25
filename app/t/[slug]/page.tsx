@@ -10,6 +10,7 @@ export default async function TripLanding({ params }: PageProps<"/t/[slug]">) {
   const { slug } = await params;
   const { view } = await tripPage(slug);
   const done = view.members.filter((m) => m.submitted).length;
+  const total = Math.max(view.trip.expectedSize ?? 0, view.members.length);
   const coordinator = view.members.find((m) => m.isCoordinator)?.name ?? "Your friend";
 
   return (
@@ -23,13 +24,15 @@ export default async function TripLanding({ params }: PageProps<"/t/[slug]">) {
       <Card className="animate-rise">
         <div className="flex items-center gap-4">
           <div className="relative">
-            <ProgressRing value={done} total={view.members.length} size={64} />
+            <ProgressRing value={done} total={total} size={64} />
             <span className="absolute inset-0 flex items-center justify-center font-display text-sm font-bold">
-              {done}/{view.members.length}
+              {done}/{total}
             </span>
           </div>
           <div className="flex-1">
-            <p className="font-semibold">{done === view.members.length ? "Everyone's in! 🎉" : `${done} of ${view.members.length} have answered`}</p>
+            <p className="font-semibold">
+              {view.members.length} joined{view.trip.expectedSize ? ` of ~${view.trip.expectedSize}` : ""} · {done} answered
+            </p>
             <p className="text-sm text-ink-soft">
               {view.deadlinePassed ? "Answers closed" : <>Closes in <Countdown target={view.trip.deadline} nowIso={view.now} className="font-semibold text-ink" /></>}
             </p>
@@ -44,7 +47,7 @@ export default async function TripLanding({ params }: PageProps<"/t/[slug]">) {
       </Card>
 
       <Card>
-        <NamePicker slug={slug} members={view.members.map((m) => ({ id: m.id, name: m.name, submitted: m.submitted }))} />
+        <NamePicker slug={slug} locked={view.trip.status === "confirmed"} members={view.members.map((m) => ({ id: m.id, name: m.name, submitted: m.submitted }))} />
       </Card>
 
       <ul className="grid grid-cols-3 gap-2 text-center text-xs text-ink-soft">

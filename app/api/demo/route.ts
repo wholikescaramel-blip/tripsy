@@ -36,6 +36,6 @@ export async function POST(req: Request) {
   } catch (err) {
     if (err instanceof AppError) return NextResponse.json({ error: err.message }, { status: err.status });
     console.error(err);
-    return NextResponse.json({ error: "Demo action failed." }, { status: 500 });
+    return NextResponse.json({ error: `Demo action failed: ${err instanceof Error ? err.message : err}` }, { status: 500 });
   }
 }

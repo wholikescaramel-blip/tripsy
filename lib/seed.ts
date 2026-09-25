@@ -122,6 +122,7 @@ export async function seedDemo() {
     target_month: nextMonth,
     deadline,
     is_demo: true,
+    expected_size: PEOPLE.length,
     members: PEOPLE.map((p, i) => ({ name: p.name, phone: p.phone, is_coordinator: i === 0 })),
   });
   for (const p of PEOPLE) {

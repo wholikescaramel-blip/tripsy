@@ -194,3 +194,25 @@ ${describe(ctx)}`;
     return { plan: sampleBlend(ctx, votes, avoid), source: "sample" };
   }
 }
+
+/** Tiny request used by /status to check the key and model work. */
+export async function pingGemini(): Promise<{ ok: boolean; model?: string; error?: string }> {
+  if (!geminiConfigured()) return { ok: false, error: "GEMINI_API_KEY is not set (the app uses sample plans)." };
+  const errors: string[] = [];
+  for (const model of MODELS) {
+    try {
+      const res = await fetch(`${API}/${model}:generateContent`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY! },
+        body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: "Reply with: ok" }] }], generationConfig: { thinkingConfig: { thinkingLevel: "low" } } }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (res.ok) return { ok: true, model };
+      const body = await res.json().catch(() => ({}));
+      errors.push(`${model}: HTTP ${res.status} ${body?.error?.message ?? ""}`.trim());
+    } catch (err) {
+      errors.push(`${model}: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+  return { ok: false, error: errors.join(" · ") };
+}

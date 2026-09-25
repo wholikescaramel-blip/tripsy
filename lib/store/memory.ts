@@ -70,6 +70,7 @@ export const memoryStore: Store = {
       blend_round: 0,
       agreed_plan_id: null,
       is_demo: input.is_demo,
+      expected_size: input.expected_size,
       created_at: nowIso(),
     };
     db.trips.push(trip);
@@ -114,6 +115,24 @@ export const memoryStore: Store = {
     for (const [k, v] of Object.entries(expect)) if (t[k as keyof Trip] !== v) return false;
     Object.assign(t, patch);
     return true;
+  },
+
+  async addMember(tripId, m) {
+    const order = db.members.filter((x) => x.trip_id === tripId).length;
+    const member: Member = {
+      id: crypto.randomUUID(),
+      trip_id: tripId,
+      name: m.name,
+      phone: m.phone,
+      is_coordinator: false,
+      sort_order: order,
+      has_budget: false,
+      submitted_at: null,
+      updated_at: null,
+      confirmed_at: null,
+    };
+    db.members.push(member);
+    return clone(member);
   },
 
   async updateMember(memberId, patch) {

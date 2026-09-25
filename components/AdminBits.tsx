@@ -68,3 +68,29 @@ export function CopyLink({ text, label = "Copy" }: { text: string; label?: strin
     </button>
   );
 }
+
+export function StartPlanningButton({ slug, adminKey }: { slug: string; adminKey: string }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div>
+      <button
+        disabled={busy}
+        onClick={async () => {
+          if (!confirm("Everyone's here? Plans will be made from the people who've joined so far. Anyone who joins later is assumed free until they answer.")) return;
+          setBusy(true);
+          setError(null);
+          const res = await fetch(`/api/t/${slug}/plans`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mode: "start", adminKey }) });
+          if (!res.ok) setError((await res.json()).error);
+          setBusy(false);
+          router.refresh();
+        }}
+        className={`${buttonClass("primary")} w-full text-sm`}
+      >
+        {busy ? "Cooking up plans…" : "🚀 Everyone's here — start planning"}
+      </button>
+      {error && <p className="mt-2 text-center text-sm font-semibold text-busy">{error}</p>}
+    </div>
+  );
+}

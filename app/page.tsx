@@ -1,5 +1,9 @@
 import { DemoLauncher } from "@/components/DemoLauncher";
+import Link from "next/link";
 import { ButtonLink } from "@/components/ui";
+import { hasSupabase, isHosted } from "@/lib/config";
+
+export const dynamic = "force-dynamic";
 
 const STEPS = [
   { emoji: "🔗", title: "One link in the group chat", text: "Riya sets the month and a deadline. Everyone gets the same WhatsApp link." },
@@ -24,6 +28,12 @@ export default function Home() {
         </span>
         <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-ink-soft shadow-card">for group chats 💬</span>
       </header>
+
+      {isHosted && !hasSupabase && (
+        <Link href="/status" className="rounded-2xl border-2 border-busy/40 bg-busy-soft px-4 py-3 text-sm font-semibold text-rose-900">
+          ⚠️ The database isn&apos;t connected yet, so nothing can be saved. Tap to see what&apos;s missing →
+        </Link>
+      )}
 
       <section className="relative h-64">
         {POSTCARDS.map((p) => (

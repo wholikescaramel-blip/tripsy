@@ -7,6 +7,7 @@ export interface NewTripInput {
   target_month: string;
   deadline: string;
   is_demo: boolean;
+  expected_size: number | null;
   members: { name: string; phone: string; is_coordinator: boolean }[];
 }
 
@@ -25,6 +26,8 @@ export interface Store {
   updateTrip(tripId: string, patch: Partial<Trip>): Promise<void>;
   /** Atomically apply `patch` only if the trip still matches `expect`. Returns false if someone else got there first. */
   claimTrip(tripId: string, expect: Partial<Trip>, patch: Partial<Trip>): Promise<boolean>;
+  /** A friend joins the trip themselves from the shared link. */
+  addMember(tripId: string, m: { name: string; phone: string }): Promise<Member>;
   updateMember(memberId: string, patch: Partial<Member>): Promise<void>;
   replaceAvailability(tripId: string, memberId: string, rows: AvailabilityRow[]): Promise<void>;
   upsertPreferences(tripId: string, prefs: Preferences): Promise<void>;

@@ -3,10 +3,11 @@
 import type { AvailabilityRow, Member, NudgeLog, Plan, Swipe, Trip } from "./types";
 import { fmtDay, fmtMonth, istDay } from "./time";
 
-export type NudgeKind = "48h" | "24h" | "12h" | "maybe" | "vote" | "confirm";
+export type NudgeKind = "group" | "48h" | "24h" | "12h" | "maybe" | "vote" | "confirm";
 
 export interface Nudge {
-  member: Member;
+  member: Member | null; // null = goes to the group chat
+  logMemberId: string; // nudge_log needs a member; group nudges are logged against the coordinator
   kind: NudgeKind;
   logKey: string; // what gets written to nudge_log once sent
   title: string;
@@ -23,9 +24,10 @@ export function waNumber(phone: string): string {
   return digits;
 }
 
+/** Direct chat if we have their number; otherwise WhatsApp opens and Riya picks the contact. */
 export function waLink(phone: string, text: string): string {
   const n = waNumber(phone);
-  return `https://wa.me/${n}?text=${encodeURIComponent(text)}`;
+  return n.length >= 8 ? `https://wa.me/${n}?text=${encodeURIComponent(text)}` : waShare(text);
 }
 
 /** Share link without a number: lets Riya pick the group chat. */
@@ -62,11 +64,20 @@ export function computeNudges(args: {
   const push = (member: Member, kind: NudgeKind, logKey: string, title: string, message: string, urgent = false) => {
     if (member.is_coordinator) return; // the coordinator is the one sending nudges
     if (sentKeys.has(`${member.id}|${logKey}`)) return;
-    due.push({ member, kind, logKey, title, message, waLink: waLink(member.phone, message), urgent });
+    due.push({ member, logMemberId: member.id, kind, logKey, title, message, waLink: waLink(member.phone, message), urgent });
   };
 
-  // 1. Deadline nudges for anyone who hasn't submitted.
+  // 1. Deadline nudges. Friends add themselves, so first a group-chat nudge for anyone who hasn't joined…
   const stage = trip.status === "collecting" ? deadlineStage(trip, now) : null;
+  const moreToJoin = trip.expected_size === null || members.length < trip.expected_size;
+  if (stage && coordinator && moreToJoin && !sentKeys.has(`${coordinator.id}|group:${stage}`)) {
+    const joined = members.map((m) => m.name).join(", ");
+    const count = trip.expected_size ? ` (${members.length} of ${trip.expected_size})` : "";
+    const left = stage === "48h" ? "2 days" : stage === "24h" ? "24 hours" : "12 hours";
+    const msg = `✈️ "${trip.name}" — ${joined} ${members.length > 1 ? "are" : "is"} in${count}. ${left} left to add yourself: tap, type your name, mark your free days for ${month}. ${tripUrl}`;
+    due.push({ member: null, logMemberId: coordinator.id, kind: "group", logKey: `group:${stage}`, title: `${left} left — post in the group chat`, message: msg, waLink: waShare(msg), urgent: stage === "12h" });
+  }
+  // …then personal nudges for people who joined but haven't filled in their answers.
   if (stage) {
     for (const m of members.filter((x) => !x.submitted_at)) {
       const link = `${tripUrl}`;
@@ -112,7 +123,7 @@ export function computeNudges(args: {
     }
   }
 
-  const order: Record<NudgeKind, number> = { "12h": 0, "24h": 1, "48h": 2, maybe: 3, vote: 4, confirm: 5 };
+  const order: Record<NudgeKind, number> = { "12h": 0, "24h": 1, "48h": 2, group: 3, maybe: 4, vote: 5, confirm: 6 };
   due.sort((a, b) => order[a.kind] - order[b.kind]);
   const names = new Map(members.map((m) => [m.id, m.name]));
   const sent = nudges

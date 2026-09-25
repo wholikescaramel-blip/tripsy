@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CopyLink, FreshPlansButton, NudgeButton } from "@/components/AdminBits";
+import { CopyLink, FreshPlansButton, NudgeButton, StartPlanningButton } from "@/components/AdminBits";
 import { AutoPlanner } from "@/components/AutoPlanner";
 import { Countdown } from "@/components/Countdown";
 import { DemoPanel } from "@/components/DemoPanel";
@@ -92,14 +92,19 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
         ) : (
           <ul className="flex flex-col gap-3">
             {due.map((n) => (
-              <li key={`${n.member.id}-${n.logKey}`} className={`rounded-2xl p-3 ${n.urgent ? "bg-coral/10" : "bg-sand"}`}>
+              <li key={`${n.logMemberId}-${n.logKey}`} className={`rounded-2xl p-3 ${n.urgent ? "bg-coral/10" : "bg-sand"}`}>
                 <div className="flex items-center gap-3">
-                  <Avatar name={n.member.name} index={idx(n.member.id)} size={40} />
+                  {n.member ? (
+                    <Avatar name={n.member.name} index={idx(n.member.id)} size={40} />
+                  ) : (
+                    <span className="flex h-10 w-10 items-center justify-center rounded-full bg-free text-lg">👥</span>
+                  )}
                   <div className="min-w-0 flex-1">
-                    <p className="font-semibold">{n.member.name}</p>
+                    <p className="font-semibold">{n.member?.name ?? "Group chat"}</p>
                     <p className="text-xs font-semibold text-coral-dark">{n.title}</p>
+                    {n.member && !n.member.phone && <p className="text-[11px] text-ink-faint">No number saved — you&apos;ll pick them in WhatsApp</p>}
                   </div>
-                  <NudgeButton slug={slug} adminKey={key} memberId={n.member.id} kind={n.logKey} href={n.waLink} />
+                  <NudgeButton slug={slug} adminKey={key} memberId={n.logMemberId} kind={n.logKey} href={n.waLink} />
                 </div>
                 <p className="mt-2 rounded-xl bg-white/70 p-2.5 text-xs text-ink-soft">&ldquo;{n.message}&rdquo;</p>
               </li>
@@ -125,14 +130,18 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
         <SectionTitle emoji="📝">Who&apos;s in</SectionTitle>
         <div className="mb-4 flex items-center gap-4">
           <div className="relative">
-            <ProgressRing value={submitted} total={view.members.length} size={60} />
+            <ProgressRing value={submitted} total={Math.max(view.trip.expectedSize ?? 0, view.members.length)} size={60} />
             <span className="absolute inset-0 flex items-center justify-center font-display text-sm font-bold">
-              {submitted}/{view.members.length}
+              {submitted}/{Math.max(view.trip.expectedSize ?? 0, view.members.length)}
             </span>
           </div>
           <p className="text-sm text-ink-soft">
-            {submitted === view.members.length
-              ? "Everyone has answered 🎉"
+            {view.members.length}
+            {view.trip.expectedSize ? ` of ~${view.trip.expectedSize}` : ""} joined, {submitted} answered.{" "}
+            {view.members.length === 1
+              ? "Share the group link — friends add themselves."
+              : submitted === view.members.length
+              ? "Everyone who joined has answered 🎉"
               : view.deadlinePassed
                 ? "Deadline passed — anyone missing is assumed free every day, no hard no's, average budget."
                 : "Anyone missing gets nudged at 48h, 24h and 12h before the deadline."}
@@ -191,10 +200,13 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
         </SectionTitle>
         {status === "collecting" && view.readyToPlan && <AutoPlanner slug={slug} />}
         {status === "collecting" && !view.readyToPlan && (
-          <p className="text-sm text-ink-soft">
-            Plans generate automatically once everyone&apos;s answered or the deadline passes
-            {view.dates.full.length + view.dates.maybe.length === 0 ? " — and there's at least one 2-day window everyone can make." : "."}
-          </p>
+          <div className="flex flex-col gap-3">
+            <p className="text-sm text-ink-soft">
+              Plans generate automatically when the deadline passes{view.trip.expectedSize ? `, or as soon as all ${view.trip.expectedSize} of you have joined and answered` : ""}
+              {view.dates.full.length + view.dates.maybe.length === 0 ? " — as long as there's a 2-day window everyone can make." : "."}
+            </p>
+            {view.members.length >= 2 && <StartPlanningButton slug={slug} adminKey={key} />}
+          </div>
         )}
 
         {status === "stuck" && view.closest && (

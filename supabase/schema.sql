@@ -22,6 +22,7 @@ create table trips (
   blend_round int not null default 0,
   agreed_plan_id uuid,
   is_demo boolean not null default false,
+  expected_size int,
   created_at timestamptz not null default now()
 );
 alter table trips enable row level security;

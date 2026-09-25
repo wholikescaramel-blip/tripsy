@@ -31,23 +31,30 @@ Riya's dashboard with **demo controls**:
    - `GEMINI_API_KEY` (from Google AI Studio)
    - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (Supabase → Project Settings → API)
 3. Restart `npm run dev`. The demo button now seeds the demo trip into Supabase.
+4. Open **`/status`** — it checks the URL, key, tables, budget privacy and Gemini, and says exactly what to fix.
 
 `.env.local` is git-ignored — keys never go to GitHub.
 
 ## Deploy to Vercel
 
 1. Import this GitHub repo in Vercel (framework: Next.js, no config needed).
-2. Add the same 3 environment variables in Vercel → Settings → Environment Variables.
-3. Deploy. **Supabase is required on Vercel** (the in-memory fallback isn't shared between serverless instances).
+2. Add the environment variables in Vercel → Settings → Environment Variables:
+   `NEXT_PUBLIC_SUPABASE_URL` (Project URL, e.g. `https://abcd.supabase.co`), `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   (the `sb_publishable_…` key — `SUPABASE_PUBLISHABLE_KEY` / `SUPABASE_URL` also work) and `GEMINI_API_KEY`.
+3. Deploy (and **Redeploy** after changing any variable). Then open `https://<your-app>/status`.
+   **Supabase is required on Vercel** — without it the app refuses to save instead of silently losing data.
 
 ## How it works
 
 | Step | Where |
 |---|---|
-| Riya creates trip → one WhatsApp link + private dashboard link | `/new`, `app/api/trips` |
-| Friend picks name, fills calendar (free / not free / maybe + "when will you know?"), vibes, activities, hard no's, private budget, home city | `/t/[slug]`, `/t/[slug]/[memberId]/form` |
+| Riya creates trip with just her name (+ optional group size) → one WhatsApp link + private dashboard link | `/new`, `app/api/trips` |
+| Friends open the link and **add themselves** (name + optional WhatsApp number) | `/t/[slug]`, `app/api/t/[slug]/join` |
+| Friend fills calendar (free / not free / maybe + "when will you know?"), vibes, activities, hard no's, private budget, home city | `/t/[slug]`, `/t/[slug]/[memberId]/form` |
 | Nudges at 48h/24h/12h (12h is a personal note from Riya), "update your maybe" on the day, vote & confirm reminders — worked out on each dashboard load | `lib/nudges.ts` |
-| Missed the deadline → assumed free all days, no vetoes, **average of the others' budgets**; shown to the group | `lib/dates.ts`, `lib/service.ts` |
+| Plans start at the deadline, as soon as the expected group size has joined and answered, or when Riya taps "start planning" | `lib/service.ts` → `readyToPlan()` |
+| Group-chat nudge at 48h/24h/12h for people who haven't joined yet | `lib/nudges.ts` |
+| Missed the deadline (or joined after planning started) → assumed free all days, no vetoes, **average of the others' budgets**; shown to the group | `lib/dates.ts`, `lib/service.ts` |
 | Common 2–4 day windows (plain code); maybe-windows shown separately with who's unsure; best options + who's missing if none | `lib/dates.ts` |
 | Gemini makes 3 plans as JSON; code rejects any that break a veto, a budget, or the dates | `lib/gemini.ts`, `lib/rules.ts` |
 | Swipe cards (touch drag + buttons) | `/t/[slug]/[memberId]/swipe` |

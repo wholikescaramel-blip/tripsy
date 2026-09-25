@@ -11,14 +11,9 @@ import type { NewPlan } from "./store/types";
 import { fmtDay, fmtRange, monthDays } from "./time";
 import type { AvailabilityRow, DayStatus, Member, Plan, PlanDraft, Preferences, TripBundle } from "./types";
 
-export class AppError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
+import { AppError } from "./errors";
+
+export { AppError };
 
 export const MAX_BLEND_ROUNDS = 2;
 
@@ -32,17 +27,31 @@ export function isDeadlinePassed(b: TripBundle, now: Date) {
   return now.getTime() >= Date.parse(b.trip.deadline);
 }
 
+/**
+ * People who haven't answered are assumed free (no vetoes, average budget) once the deadline
+ * passes — or once planning has started, so someone joining late doesn't wipe out every plan.
+ */
+export function assumeMissing(b: TripBundle, now: Date) {
+  return isDeadlinePassed(b, now) || b.trip.status !== "collecting";
+}
+
 export function datesFor(b: TripBundle, now: Date): DatesResult {
-  return findCommonDates(b.members, b.availability, b.trip.target_month, isDeadlinePassed(b, now));
+  return findCommonDates(b.members, b.availability, b.trip.target_month, assumeMissing(b, now));
+}
+
+/** Everyone we expect has joined and answered (only knowable if Riya said how many of you there are). */
+export function everyoneAnswered(b: TripBundle) {
+  const allSubmitted = b.members.every((m) => m.submitted_at);
+  return allSubmitted && b.trip.expected_size !== null && b.members.length >= b.trip.expected_size;
 }
 
 export function readyToPlan(b: TripBundle, dates: DatesResult, now: Date) {
-  const everyoneIn = b.members.every((m) => m.submitted_at) || isDeadlinePassed(b, now);
-  return b.trip.status === "collecting" && everyoneIn && dates.full.length + dates.maybe.length > 0;
+  const go = isDeadlinePassed(b, now) || everyoneAnswered(b);
+  return b.trip.status === "collecting" && b.members.length >= 2 && go && dates.full.length + dates.maybe.length > 0;
 }
 
 function planContext(b: TripBundle, dates: DatesResult, ceiling: number | null, now: Date): PlanContext {
-  const passed = isDeadlinePassed(b, now);
+  const passed = assumeMissing(b, now);
   return {
     tripName: b.trip.name,
     month: b.trip.target_month,
@@ -132,7 +141,10 @@ export async function generateInitialPlans(slug: string, now: Date, force = fals
   const b = await load(slug);
   const dates = datesFor(b, now);
   if (!force && !readyToPlan(b, dates, now)) return { generated: false };
-  if (dates.full.length + dates.maybe.length === 0) throw new AppError(409, "No common dates yet — nothing to plan around.");
+  if (b.members.length < 2) throw new AppError(409, "Only you have joined so far — share the link first.");
+  const missing = b.members.filter((m) => !m.submitted_at && !isDeadlinePassed(b, now));
+  if (force && missing.length) throw new AppError(409, `${missing.map((m) => m.name).join(", ")} still ${missing.length > 1 ? "have" : "has"} to fill in their answers.`);
+  if (dates.full.length + dates.maybe.length === 0) throw new AppError(409, "No 2-day window works for everyone yet — nothing to plan around.");
   if (!(await store.claimTrip(b.trip.id, { status: "collecting" }, { status: "voting", blend_round: 0 }))) {
     return { generated: false };
   }
@@ -180,6 +192,31 @@ export async function freshPlans(slug: string, now: Date) {
   ]);
   await log(b, `🔄 Riya asked for fresh plans — ${good.length} new ones to swipe${sourceNote(source)}`, "plans");
   return { generated: true };
+}
+
+// ---------------------------------------------------------------------------
+// 1b. Friends add themselves from the shared link
+
+export async function joinTrip(slug: string, rawName: string, rawPhone: string) {
+  const b = await load(slug);
+  const name = rawName.trim().replace(/\s+/g, " ").slice(0, 30);
+  const phone = rawPhone.trim().slice(0, 20);
+  if (!name) throw new AppError(400, "What should we call you?");
+  if (b.trip.status === "confirmed") throw new AppError(409, "This trip is already locked 🔒");
+  if (b.members.length >= 20) throw new AppError(409, "This trip is full.");
+  const existing = b.members.find((m) => m.name.toLowerCase() === name.toLowerCase());
+  if (existing) throw new AppError(409, `There's already a ${existing.name} — pick your name from the list, or add your surname.`);
+  const m = await store.addMember(b.trip.id, { name, phone });
+  const stage = b.trip.status === "collecting" ? "" : b.trip.status === "agreed" ? " (after the plan was agreed)" : " (plans already exist — they'll be re-checked once they fill in)";
+  await log(b, `👋 ${name} joined the trip${stage}`, "joined", m.id);
+  return { memberId: m.id };
+}
+
+/** Riya's "everyone's here — start planning" button. */
+export async function startPlanning(slug: string, now: Date) {
+  const b = await load(slug);
+  if (b.trip.status !== "collecting") throw new AppError(409, "Planning has already started.");
+  return generateInitialPlans(slug, now, true);
 }
 
 // ---------------------------------------------------------------------------
@@ -295,8 +332,8 @@ export async function saveAnswers(slug: string, memberId: string, input: Answers
   const stamp = new Date().toISOString();
   await store.updateMember(memberId, { submitted_at: member.submitted_at ?? stamp, updated_at: stamp });
 
-  const late = firstTime && isDeadlinePassed(b, now);
-  if (firstTime) await log(b, `${member.name} is in ✅${late ? " (after the deadline — replacing the 'assumed free' guess)" : ""}`, "submitted", memberId);
+  const late = firstTime && assumeMissing(b, now);
+  if (firstTime) await log(b, `${member.name} filled in their answers ✅${late ? " (late — replacing the 'assumed free' guess)" : ""}`, "submitted", memberId);
   const afterAgree = b.trip.status === "agreed" ? "After agreeing: " : "";
   for (const c of changes) await log(b, `${afterAgree}${c}`, "edit", memberId);
 

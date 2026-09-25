@@ -78,9 +78,11 @@ export default async function Hub({ params }: PageProps<"/t/[slug]/[memberId]">)
           <p className="mt-1 text-sm text-white/70">
             {waitingOn.length
               ? `Waiting on ${waitingOn.join(", ")}. The app nudges them — you don't have to.`
-              : view.dates.full.length + view.dates.maybe.length === 0
-                ? "Everyone's answered, but there's no 2-day window that works for everyone yet. Check the closest dates below."
-                : "Plans are on their way."}
+              : view.members.length < 2
+                ? "It's just you so far — share the link in the group chat so friends can add themselves."
+                : view.dates.full.length + view.dates.maybe.length === 0
+                  ? "Everyone who's joined has answered, but there's no 2-day window that works for all of you yet. Check the closest dates below."
+                  : "Everyone who's joined has answered. Plans get made at the deadline, or sooner if the coordinator starts them."}
           </p>
           {!view.deadlinePassed && waitingOn.length > 0 && (
             <p className="mt-3 text-sm">

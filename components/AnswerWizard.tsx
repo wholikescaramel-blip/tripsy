@@ -80,6 +80,8 @@ export function AnswerWizard({ initial }: { initial: WizardInitial }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string[] | null>(null);
+  // Remember whether this was a first submission: router.refresh() updates `initial` after saving.
+  const [firstTime] = useState(!initial.submitted);
 
   const budgetKey = `tripsy:budget:${initial.memberId}`;
   useEffect(() => {
@@ -169,9 +171,9 @@ export function AnswerWizard({ initial }: { initial: WizardInitial }) {
     return (
       <div className="flex flex-col items-center gap-4 pt-6 text-center animate-rise">
         <p className="text-7xl animate-float">🥳</p>
-        <h2 className="font-display text-3xl font-extrabold">{initial.submitted ? "Updated!" : `You're in, ${initial.name}!`}</h2>
+        <h2 className="font-display text-3xl font-extrabold">{!firstTime ? "Updated!" : `You're in, ${initial.name}!`}</h2>
         <p className="max-w-xs text-ink-soft">
-          {initial.submitted
+          {!firstTime
             ? done.length
               ? "The group will see what changed, and any plan that no longer works gets fixed automatically."
               : "Saved. Nothing important changed."
@@ -436,7 +438,7 @@ export function AnswerWizard({ initial }: { initial: WizardInitial }) {
             </button>
           ) : (
             <button type="button" disabled={saving} onClick={save} className={`${buttonClass("primary")} flex-1`}>
-              {saving ? "Saving…" : initial.submitted ? "Save changes" : "Lock in my answers 🎉"}
+              {saving ? "Saving…" : !firstTime ? "Save changes" : "Lock in my answers 🎉"}
             </button>
           )}
         </div>

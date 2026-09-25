@@ -13,6 +13,7 @@ export async function POST() {
     return res;
   } catch (err) {
     console.error(err);
-    return NextResponse.json({ error: "Couldn't create the demo trip. Is the database schema set up?" }, { status: 500 });
+    const detail = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: `Couldn't create the demo trip: ${detail}` }, { status: 500 });
   }
 }

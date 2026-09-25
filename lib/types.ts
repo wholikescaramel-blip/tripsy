@@ -15,6 +15,7 @@ export interface Trip {
   blend_round: number; // 0 = initial plans, 1..2 = blend rounds
   agreed_plan_id: string | null;
   is_demo: boolean;
+  expected_size: number | null; // "how many of you?" (optional) — helps know when everyone has joined
   created_at: string;
 }
 

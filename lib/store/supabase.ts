@@ -1,19 +1,20 @@
 // Supabase store. Uses only the public anon key; budgets go through RPC functions (see supabase/schema.sql).
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { Plan, TripBundle } from "../types";
+import { supabaseKey, supabaseUrl } from "../config";
+import type { Member, Plan, TripBundle } from "../types";
 import type { NewPlan, NewTripInput, Store } from "./types";
 
 let client: SupabaseClient | null = null;
 function sb(): SupabaseClient {
-  client ??= createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+  client ??= createClient(supabaseUrl!.value, supabaseKey!.value, {
     auth: { persistSession: false },
   });
   return client;
 }
 
-function check<T>(res: { data: T; error: { message: string } | null }): T {
-  if (res.error) throw new Error(`Supabase: ${res.error.message}`);
+function check<T>(res: { data: T; error: { message: string; hint?: string | null } | null }): T {
+  if (res.error) throw new Error(`Supabase: ${res.error.message}${res.error.hint ? ` (${res.error.hint})` : ""}`);
   return res.data;
 }
 
@@ -72,6 +73,11 @@ export const supabaseStore: Store = {
     for (const [k, v] of Object.entries(expect)) q = v === null ? q.is(k, null) : q.eq(k, v as string | number);
     const rows = check(await q.select("id"));
     return (rows?.length ?? 0) > 0;
+  },
+
+  async addMember(tripId, m) {
+    const { count } = await sb().from("members").select("id", { count: "exact", head: true }).eq("trip_id", tripId);
+    return check(await sb().from("members").insert({ ...m, trip_id: tripId, sort_order: count ?? 0 }).select().single()) as Member;
   },
 
   async updateMember(memberId, patch) {

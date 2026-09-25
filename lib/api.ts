@@ -1,6 +1,6 @@
 import "server-only";
 import { NextResponse } from "next/server";
-import { AppError } from "./service";
+import { AppError } from "./errors";
 
 /** Wrap a route handler so AppErrors become clean JSON responses. */
 export async function handle(fn: () => Promise<unknown>) {
@@ -9,7 +9,9 @@ export async function handle(fn: () => Promise<unknown>) {
   } catch (err) {
     if (err instanceof AppError) return NextResponse.json({ error: err.message }, { status: err.status });
     console.error(err);
-    return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
+    // Database errors are safe to show (no keys in them) and make setup problems obvious.
+    const msg = err instanceof Error && err.message.startsWith("Supabase:") ? `${err.message} — open /status to check the setup.` : "Something went wrong. Please try again.";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
 

@@ -2,7 +2,7 @@
 import "server-only";
 
 import { checkPlan } from "./rules";
-import { datesFor, isDeadlinePassed, readyToPlan } from "./service";
+import { assumeMissing, datesFor, everyoneAnswered, isDeadlinePassed, readyToPlan } from "./service";
 import type { DatesResult } from "./dates";
 import { istDay } from "./time";
 import type { ChangeEntry, Plan, TripBundle, TripStatus } from "./types";
@@ -39,6 +39,7 @@ export interface TripView {
     blendRound: number;
     agreedPlanId: string | null;
     isDemo: boolean;
+    expectedSize: number | null;
   };
   now: string;
   today: string;
@@ -53,10 +54,12 @@ export interface TripView {
   closest: { plan: PlanView; unhappy: { name: string; reason: string | null }[] } | null;
   changes: ChangeEntry[];
   readyToPlan: boolean;
+  everyoneAnswered: boolean;
 }
 
 export function buildView(b: TripBundle, now: Date, opts: { admin?: boolean } = {}): TripView {
   const passed = isDeadlinePassed(b, now);
+  const assume = assumeMissing(b, now);
   const dates = datesFor(b, now);
   const name = (id: string) => b.members.find((m) => m.id === id)?.name ?? "?";
 
@@ -65,7 +68,7 @@ export function buildView(b: TripBundle, now: Date, opts: { admin?: boolean } = 
     name: m.name,
     isCoordinator: m.is_coordinator,
     submitted: Boolean(m.submitted_at),
-    assumed: !m.submitted_at && passed,
+    assumed: !m.submitted_at && assume,
     updatedAt: m.updated_at,
     confirmed: Boolean(m.confirmed_at),
     homeCity: b.preferences.find((p) => p.member_id === m.id)?.home_city ?? "",
@@ -119,6 +122,7 @@ export function buildView(b: TripBundle, now: Date, opts: { admin?: boolean } = 
       blendRound: b.trip.blend_round,
       agreedPlanId: b.trip.agreed_plan_id,
       isDemo: b.trip.is_demo,
+      expectedSize: b.trip.expected_size,
     },
     now: now.toISOString(),
     today,
@@ -133,5 +137,6 @@ export function buildView(b: TripBundle, now: Date, opts: { admin?: boolean } = 
     closest,
     changes: b.changes,
     readyToPlan: readyToPlan(b, dates, now),
+    everyoneAnswered: everyoneAnswered(b),
   };
 }

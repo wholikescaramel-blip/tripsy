@@ -64,8 +64,8 @@ export function DatesPanel({ view }: { view: TripView }) {
       </SectionTitle>
       {assumed.length > 0 && (
         <div className="mb-3 rounded-2xl border border-maybe/40 bg-maybe-soft p-3 text-sm text-amber-900">
-          <b>⏰ Missed the deadline:</b> {assumed.map((m) => m.name).join(", ")}. We&apos;re treating them as free every day, with no hard
-          no&apos;s and an average budget, so the trip can move on.
+          <b>⏰ Not answered yet:</b> {assumed.map((m) => m.name).join(", ")}. Until they do, we&apos;re treating them as free every day, with no
+          hard no&apos;s and an average budget, so the trip can move on.
         </div>
       )}
       {waitingOn.length > 0 && (

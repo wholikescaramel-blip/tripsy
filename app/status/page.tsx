@@ -1,0 +1,102 @@
+import Link from "next/link";
+import { createClient } from "@supabase/supabase-js";
+import { Card } from "@/components/ui";
+import { hasSupabase, isHosted, supabaseKey, supabaseUrl } from "@/lib/config";
+import { pingGemini } from "@/lib/gemini";
+
+export const dynamic = "force-dynamic";
+export const metadata = { title: "Setup status — Tripsy" };
+
+type Check = { label: string; ok: boolean | null; detail: string; fix?: string };
+
+async function databaseChecks(): Promise<Check[]> {
+  const checks: Check[] = [
+    {
+      label: "Supabase URL",
+      ok: Boolean(supabaseUrl),
+      detail: supabaseUrl ? `Found in ${supabaseUrl.name} (${new URL(supabaseUrl.value).host})` : "Not set",
+      fix: "Add NEXT_PUBLIC_SUPABASE_URL = your Project URL (Supabase → Project Settings → Data API), e.g. https://abcd.supabase.co",
+    },
+    {
+      label: "Supabase public key",
+      ok: Boolean(supabaseKey) && !supabaseKey!.value.startsWith("sb_secret_"),
+      detail: supabaseKey
+        ? supabaseKey.value.startsWith("sb_secret_")
+          ? `${supabaseKey.name} holds a SECRET key — use the publishable key instead`
+          : `Found in ${supabaseKey.name} (${supabaseKey.value.slice(0, 15)}…)`
+        : "Not set",
+      fix: "Add NEXT_PUBLIC_SUPABASE_ANON_KEY = your publishable key (sb_publishable_…) from Supabase → Project Settings → API Keys",
+    },
+  ];
+  if (!hasSupabase) return checks;
+  const sb = createClient(supabaseUrl!.value, supabaseKey!.value, { auth: { persistSession: false } });
+  try {
+    const { error } = await sb.from("trips").select("id, expected_size").limit(1);
+    checks.push({
+      label: "Database tables",
+      ok: !error,
+      detail: error ? error.message : "Tables found and readable",
+      fix: "Run supabase/schema.sql in Supabase → SQL Editor (click “Run without RLS” — the file enables RLS itself).",
+    });
+    const { error: rpcError } = await sb.rpc("budget_ceiling", { p_trip: "00000000-0000-0000-0000-000000000000" });
+    checks.push({
+      label: "Private budget functions",
+      ok: !rpcError,
+      detail: rpcError ? rpcError.message : "Working",
+      fix: "Re-run supabase/schema.sql — the functions are at the bottom of the file.",
+    });
+    const { error: leak } = await sb.from("member_budgets").select("member_id").limit(1);
+    checks.push({
+      label: "Budgets hidden from the public key",
+      ok: Boolean(leak),
+      detail: leak ? "Yes — reading budgets is refused" : "NO — budgets are readable! Re-run supabase/schema.sql",
+    });
+  } catch (err) {
+    checks.push({ label: "Database connection", ok: false, detail: err instanceof Error ? err.message : String(err), fix: "Check the Project URL is right and the project isn't paused." });
+  }
+  return checks;
+}
+
+export default async function Status() {
+  const [db, gemini] = await Promise.all([databaseChecks(), pingGemini()]);
+  const checks: Check[] = [
+    ...db,
+    {
+      label: "Gemini",
+      ok: gemini.ok ? true : process.env.GEMINI_API_KEY ? false : null,
+      detail: gemini.ok ? `Working (${gemini.model})` : gemini.error ?? "",
+      fix: "Add GEMINI_API_KEY from aistudio.google.com/apikey. Without it the app uses sample plans.",
+    },
+  ];
+  const allGood = checks.every((c) => c.ok !== false);
+
+  return (
+    <main className="flex flex-col gap-5 pt-6">
+      <Link href="/" className="text-sm font-semibold text-ink-soft">
+        ← Home
+      </Link>
+      <div>
+        <h1 className="font-display text-3xl font-extrabold">Setup status {allGood ? "✅" : "🛠️"}</h1>
+        <p className="mt-1 text-ink-soft">
+          {allGood ? "Everything's connected." : "Something needs fixing — see the red rows. After changing Vercel environment variables, redeploy."}
+        </p>
+        {!hasSupabase && !isHosted && <p className="mt-2 text-sm text-ink-soft">Running locally without a database: data is kept in memory until restart.</p>}
+      </div>
+      <Card>
+        <ul className="flex flex-col gap-4">
+          {checks.map((c) => (
+            <li key={c.label} className="flex gap-3">
+              <span className="text-xl">{c.ok === true ? "✅" : c.ok === false ? "❌" : "⚪"}</span>
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold">{c.label}</p>
+                <p className="text-sm break-words text-ink-soft">{c.detail}</p>
+                {c.ok === false && c.fix && <p className="mt-1 rounded-xl bg-busy-soft px-3 py-2 text-xs font-semibold text-rose-900">Fix: {c.fix}</p>}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </Card>
+      <p className="text-center text-xs text-ink-faint">This page never shows full keys.</p>
+    </main>
+  );
+}
