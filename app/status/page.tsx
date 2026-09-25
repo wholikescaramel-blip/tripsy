@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import { Card } from "@/components/ui";
-import { hasSupabase, isHosted, supabaseKey, supabaseUrl } from "@/lib/config";
+import { hasSupabase, isHosted, supabaseKey, supabaseKeyIsSecret, supabaseUrl } from "@/lib/config";
 import { pingGemini } from "@/lib/gemini";
 
 export const dynamic = "force-dynamic";
@@ -20,9 +20,9 @@ async function databaseChecks(): Promise<Check[]> {
     },
     {
       label: "Supabase public key",
-      ok: Boolean(supabaseKey) && !supabaseKey!.value.startsWith("sb_secret_"),
+      ok: Boolean(supabaseKey) && !supabaseKeyIsSecret,
       detail: supabaseKey
-        ? supabaseKey.value.startsWith("sb_secret_")
+        ? supabaseKeyIsSecret
           ? `${supabaseKey.name} holds a SECRET key — use the publishable key instead`
           : `Found in ${supabaseKey.name} (${supabaseKey.value.slice(0, 15)}…)`
         : "Not set",

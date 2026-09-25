@@ -38,7 +38,20 @@ export const supabaseKey = pick(
   "SUPABASE_PUBLISHABLE_KEY",
   "SUPABASE_ANON_KEY",
 );
-export const hasSupabase = Boolean(supabaseUrl?.value && supabaseKey);
+/** The secret / service_role key must never be used: it bypasses the budget privacy rules. */
+function isSecretKey(key: string): boolean {
+  if (key.startsWith("sb_secret_")) return true;
+  const parts = key.split(".");
+  if (parts.length !== 3) return false;
+  try {
+    return JSON.parse(Buffer.from(parts[1], "base64url").toString()).role === "service_role";
+  } catch {
+    return false;
+  }
+}
+export const supabaseKeyIsSecret = Boolean(supabaseKey && isSecretKey(supabaseKey.value));
+
+export const hasSupabase = Boolean(supabaseUrl?.value && supabaseKey && !supabaseKeyIsSecret);
 
 /** True on Vercel, where the in-memory fallback can't work (each request may hit a different server). */
 export const isHosted = Boolean(process.env.VERCEL);
