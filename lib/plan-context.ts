@@ -6,12 +6,11 @@ import type { PlanDraft } from "./types";
 export interface PersonContext {
   name: string;
   homeCity: string;
-  vibes: string[]; // option keys
-  activities: string[]; // option keys
-  vetoes: string[]; // veto keys (absolute)
-  vetoNotes: string;
-  wishes: string;
-  assumed: boolean; // missed the deadline: free every day, no vetoes, average budget
+  likedIdeas: string[]; // destination names they swiped right on
+  passedIdeas: string[]; // swiped left
+  vetoes: string[]; // hard-pass keys (absolute)
+  vetoNotes: string; // typed hard passes
+  assumed: boolean; // hasn't answered: counted free on every option, no hard passes, average budget
 }
 
 export interface WindowContext {
@@ -24,8 +23,9 @@ export interface WindowContext {
 export interface PlanContext {
   tripName: string;
   month: string; // YYYY-MM-01
-  windows: WindowContext[];
+  windows: WindowContext[]; // the date options that work
   people: PersonContext[];
+  ideaLikes: { destination: string; likes: number; of: number }[];
   budgetCeiling: number | null; // per person, INR
 }
 

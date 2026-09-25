@@ -6,44 +6,6 @@ export interface Option {
   emoji: string;
 }
 
-export const VIBES: Option[] = [
-  { key: "chill", label: "Chill & slow", emoji: "🛋️" },
-  { key: "adventure", label: "Adventure", emoji: "🧗" },
-  { key: "party", label: "Party", emoji: "🪩" },
-  { key: "nature", label: "Nature escape", emoji: "🌿" },
-  { key: "culture", label: "Culture & history", emoji: "🏛️" },
-  { key: "foodie", label: "Foodie trip", emoji: "🍜" },
-  { key: "city", label: "City break", emoji: "🌆" },
-  { key: "beach", label: "Beach holiday", emoji: "🏖️" },
-  { key: "mountains", label: "Mountains", emoji: "🏔️" },
-  { key: "roadtrip", label: "Road trip", emoji: "🚗" },
-  { key: "spiritual", label: "Spiritual", emoji: "🕉️" },
-  { key: "wellness", label: "Wellness & spa", emoji: "🧖" },
-];
-
-export const ACTIVITIES: Option[] = [
-  { key: "beach_time", label: "Beach lazing", emoji: "🌊" },
-  { key: "trekking", label: "Trekking / hikes", emoji: "🥾" },
-  { key: "water_sports", label: "Water sports", emoji: "🏄" },
-  { key: "scuba", label: "Scuba / snorkel", emoji: "🤿" },
-  { key: "adventure_sports", label: "Paragliding, rafting…", emoji: "🪂" },
-  { key: "camping", label: "Camping", emoji: "⛺" },
-  { key: "stargazing", label: "Stargazing", emoji: "🌌" },
-  { key: "wildlife", label: "Wildlife safari", emoji: "🐅" },
-  { key: "food_crawl", label: "Street food crawl", emoji: "🥘" },
-  { key: "cafes", label: "Cafe hopping", emoji: "☕" },
-  { key: "nightlife", label: "Clubs & bars", emoji: "🍸" },
-  { key: "heritage", label: "Forts, temples, heritage", emoji: "🏰" },
-  { key: "museums", label: "Museums & art", emoji: "🖼️" },
-  { key: "shopping", label: "Markets & shopping", emoji: "🛍️" },
-  { key: "photography", label: "Photo spots", emoji: "📸" },
-  { key: "spa", label: "Spa & massages", emoji: "💆" },
-  { key: "villa", label: "Villa, games & music", emoji: "🎲" },
-  { key: "festivals", label: "Local events & festivals", emoji: "🎉" },
-  { key: "cycling", label: "Cycling / scooter rides", emoji: "🛵" },
-  { key: "boat", label: "Boat rides & cruises", emoji: "⛵" },
-];
-
 export interface VetoOption extends Option {
   group: string;
   /** Word-starts that, if found in a plan's destination/activities/travel/stay text, break the veto. */
@@ -101,13 +63,49 @@ export const VETOES: VetoOption[] = [
 ];
 
 export const VETO_BY_KEY = Object.fromEntries(VETOES.map((v) => [v.key, v]));
-export const VIBE_BY_KEY = Object.fromEntries(VIBES.map((v) => [v.key, v]));
-export const ACTIVITY_BY_KEY = Object.fromEntries(ACTIVITIES.map((v) => [v.key, v]));
 
-export function labelFor(key: string): string {
-  const o = VIBE_BY_KEY[key] ?? ACTIVITY_BY_KEY[key] ?? VETO_BY_KEY[key];
-  return o ? `${o.emoji} ${o.label}` : key;
+/** The short list of hard passes people tap. The full VETOES list above is what the checker and Gemini use. */
+export const HARD_PASS_KEYS = [
+  "flights",
+  "overnight_travel",
+  "trekking",
+  "adventure_sports",
+  "beaches",
+  "cold",
+  "nightlife",
+  "camping",
+  "hostels",
+  "boats",
+  "religious",
+  "self_drive",
+];
+
+/** Match typed hard passes ("no treks, hate flying") to known keys, so the checker catches them too. */
+export function matchHardPasses(text: string): string[] {
+  const t = ` ${text.toLowerCase()} `;
+  const esc = (w: string) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const hits = new Set<string>();
+  for (const v of VETOES) {
+    const words = [v.label.toLowerCase(), ...v.keywords];
+    if (words.some((w) => new RegExp(`(^|[^a-z])${esc(w)}`).test(t))) hits.add(v.key);
+  }
+  return [...hits];
 }
+
+export const BUDGET_TIERS = [
+  { key: "low", emoji: "💸", label: "Keep it cheap", range: "under ₹10k", min: 0, max: 10000 },
+  { key: "mid", emoji: "🙂", label: "Comfortable", range: "₹10k – ₹20k", min: 10000, max: 20000 },
+  { key: "high", emoji: "🥂", label: "Treat ourselves", range: "₹20k – ₹40k", min: 20000, max: 40000 },
+] as const;
+
+export const CITIES = ["Mumbai", "Delhi", "Bengaluru", "Pune", "Chennai", "Hyderabad", "Kolkata", "Ahmedabad"];
+
+/** "When will you know?" chips for a maybe vote → days from today. */
+export const KNOW_BY = [
+  { key: "few_days", label: "In a few days", days: 3 },
+  { key: "next_week", label: "Next week", days: 7 },
+  { key: "closer", label: "Closer to the time", days: 14 },
+] as const;
 
 export const DECLINE_REASONS = [
   "Dates don't work",

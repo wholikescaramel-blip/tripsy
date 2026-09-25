@@ -1,7 +1,5 @@
 // Shared data types. Row shapes mirror supabase/schema.sql.
 
-export type DayStatus = "free" | "busy" | "maybe";
-
 export type TripStatus = "collecting" | "voting" | "agreed" | "confirmed" | "stuck";
 
 export interface Trip {
@@ -12,10 +10,9 @@ export interface Trip {
   target_month: string; // YYYY-MM-01
   deadline: string; // ISO timestamp
   status: TripStatus;
-  blend_round: number; // 0 = initial plans, 1..2 = blend rounds
+  blend_round: number; // 0 = first plans, 1 = the blend
   agreed_plan_id: string | null;
   is_demo: boolean;
-  expected_size: number | null; // "how many of you?" (optional) — helps know when everyone has joined
   created_at: string;
 }
 
@@ -27,26 +24,56 @@ export interface Member {
   is_coordinator: boolean;
   sort_order: number;
   has_budget: boolean;
-  submitted_at: string | null;
+  submitted_at: string | null; // finished all 4 quick steps
   updated_at: string | null;
   confirmed_at: string | null;
 }
 
-export interface AvailabilityRow {
+/** A date range people vote on (the app suggests weekends; Riya can add her own). */
+export interface DateOption {
+  id: string;
+  trip_id: string;
+  start_date: string; // YYYY-MM-DD
+  end_date: string;
+  added_by: "app" | "coordinator";
+  created_at: string;
+}
+
+export type DateVoteValue = "yes" | "no" | "maybe";
+
+export interface DateVote {
+  option_id: string;
   member_id: string;
-  day: string; // YYYY-MM-DD
-  status: DayStatus;
-  maybe_known_by: string | null; // YYYY-MM-DD
+  vote: DateVoteValue;
+  known_by: string | null; // YYYY-MM-DD, only for "maybe"
+  updated_at: string;
+}
+
+/** A destination idea card people swipe on before any plan exists. */
+export interface Idea {
+  id: string;
+  trip_id: string;
+  destination: string;
+  region: string;
+  pitch: string;
+  highlights: string[];
+  emoji: string;
+  cost_estimate: number; // rough INR per person
+  tags: string[]; // hard-pass keys this idea involves
+  sort_order: number;
+}
+
+export interface IdeaSwipe {
+  idea_id: string;
+  member_id: string;
+  liked: boolean;
 }
 
 export interface Preferences {
   member_id: string;
   home_city: string;
-  vibes: string[];
-  activities: string[];
-  vetoes: string[];
-  veto_notes: string;
-  wishes: string;
+  vetoes: string[]; // hard-pass keys
+  veto_notes: string; // "type your own"
 }
 
 export interface PlanActivity {
@@ -107,7 +134,10 @@ export interface NudgeLog {
 export interface TripBundle {
   trip: Trip;
   members: Member[];
-  availability: AvailabilityRow[];
+  dateOptions: DateOption[];
+  dateVotes: DateVote[];
+  ideas: Idea[];
+  ideaSwipes: IdeaSwipe[];
   preferences: Preferences[];
   plans: Plan[];
   swipes: Swipe[];
@@ -129,3 +159,5 @@ export interface PlanDraft {
   fit_notes: Record<string, string>;
   tags: string[];
 }
+
+export type IdeaDraft = Omit<Idea, "id" | "trip_id" | "sort_order">;

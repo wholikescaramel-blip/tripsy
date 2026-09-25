@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { waShare } from "@/lib/nudges";
 import { fmtDateTime, fmtMonth, fromIstLocal, istDay, toIstLocal } from "@/lib/time";
-import { Card, buttonClass } from "./ui";
+import { Avatar, Card, buttonClass } from "./ui";
 
 const inputClass = "w-full rounded-2xl border border-line bg-white px-4 py-3 text-base outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15";
 
@@ -19,9 +19,12 @@ export function CreateTripForm() {
   const [name, setName] = useState("");
   const [month, setMonth] = useState(defaults.month);
   const [deadline, setDeadline] = useState(defaults.deadline);
-  const [yourName, setYourName] = useState("");
-  const [yourPhone, setYourPhone] = useState("");
-  const [groupSize, setGroupSize] = useState<number | null>(5);
+  const [people, setPeople] = useState([
+    { name: "", phone: "" },
+    { name: "", phone: "" },
+    { name: "", phone: "" },
+  ]);
+  const update = (i: number, key: "name" | "phone", value: string) => setPeople((ps) => ps.map((p, j) => (j === i ? { ...p, [key]: value } : p)));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<{ slug: string; adminKey: string; memberId: string } | null>(null);
@@ -34,7 +37,7 @@ export function CreateTripForm() {
     const res = await fetch("/api/trips", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name, month, deadline, yourName, yourPhone, groupSize }),
+      body: JSON.stringify({ name, month, deadline, people: people.filter((p) => p.name.trim()) }),
     });
     const json = await res.json();
     setBusy(false);
@@ -49,7 +52,7 @@ export function CreateTripForm() {
     const origin = typeof window !== "undefined" ? window.location.origin : "";
     const shareUrl = `${origin}/t/${created.slug}`;
     const adminUrl = `${origin}/t/${created.slug}/admin?key=${created.adminKey}`;
-    const msg = `✈️ ${name} is happening! Tap the link, add your name and mark your free days for ${fmtMonth(`${month}-01`)} + what you'd love to do. Takes 2 min — closes ${fmtDateTime(fromIstLocal(deadline).toISOString())}. ${shareUrl}`;
+    const msg = `✈️ ${name} is happening! Tap the link, tap your name, say yes/no to a few dates and swipe some ideas for ${fmtMonth(`${month}-01`)}. Takes 1 min — closes ${fmtDateTime(fromIstLocal(deadline).toISOString())}. ${shareUrl}`;
     const copy = async (label: string, text: string) => {
       await navigator.clipboard.writeText(text).catch(() => {});
       setCopied(label);
@@ -60,7 +63,7 @@ export function CreateTripForm() {
         <div className="text-center">
           <p className="text-6xl animate-float">🎒</p>
           <h1 className="mt-3 font-display text-3xl font-extrabold">Your trip is live!</h1>
-          <p className="mt-1 text-ink-soft">Drop this one link in the group chat. Friends add themselves — that&apos;s your last chasing job.</p>
+          <p className="mt-1 text-ink-soft">Drop this one link in the group chat. Everyone taps their name — that&apos;s your last chasing job.</p>
         </div>
         <Card>
           <p className="text-xs font-bold tracking-wide text-ink-faint uppercase">Group link</p>
@@ -86,7 +89,7 @@ export function CreateTripForm() {
             </button>
           </div>
         </Card>
-        <Link href={`/t/${created.slug}/${created.memberId}/form`} className={`${buttonClass("ghost")} w-full`}>
+        <Link href={`/t/${created.slug}/${created.memberId}/start`} className={`${buttonClass("ghost")} w-full`}>
           ✏️ Fill in your own answers
         </Link>
       </div>
@@ -114,31 +117,37 @@ export function CreateTripForm() {
       </Card>
 
       <Card>
-        <p className="font-display text-lg font-bold">About you</p>
-        <p className="text-sm text-ink-soft">Just you — friends add themselves from the link.</p>
+        <p className="font-display text-lg font-bold">Who&apos;s going?</p>
+        <p className="text-sm text-ink-soft">Just names. Numbers are optional — only for one-tap WhatsApp nudges. You can add or remove people later.</p>
         <div className="mt-4 flex flex-col gap-3">
-          <input className={inputClass} placeholder="Your name" value={yourName} onChange={(e) => setYourName(e.target.value)} required />
-          <input className={inputClass} placeholder="Your WhatsApp number (optional)" inputMode="tel" value={yourPhone} onChange={(e) => setYourPhone(e.target.value)} />
+          {people.map((p, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <Avatar name={p.name || "?"} index={i} size={40} />
+              <input
+                className={`${inputClass} min-w-0 flex-[1.2]`}
+                placeholder={i === 0 ? "Your name" : `Friend ${i}`}
+                value={p.name}
+                onChange={(e) => update(i, "name", e.target.value)}
+                required={i < 2}
+                maxLength={30}
+              />
+              <input className={`${inputClass} min-w-0 flex-1 text-sm`} placeholder="Phone (optional)" inputMode="tel" value={p.phone} onChange={(e) => update(i, "phone", e.target.value)} maxLength={20} />
+              {i > 0 ? (
+                <button type="button" aria-label="Remove" onClick={() => setPeople((ps) => ps.filter((_, j) => j !== i))} className="h-10 w-8 shrink-0 text-lg text-ink-faint">
+                  ✕
+                </button>
+              ) : (
+                <span className="w-8 shrink-0" />
+              )}
+            </div>
+          ))}
         </div>
-        <div className="mt-5">
-          <p className="text-sm font-semibold">How many of you, roughly? <span className="font-normal text-ink-faint">(optional)</span></p>
-          <p className="text-xs text-ink-faint">Lets the app start planning as soon as everyone&apos;s in, instead of waiting for the deadline.</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {[3, 4, 5, 6, 8, 10].map((n) => (
-              <button
-                key={n}
-                type="button"
-                onClick={() => setGroupSize(n)}
-                className={`h-11 min-w-11 rounded-full border px-3 font-bold transition ${groupSize === n ? "border-ink bg-ink text-white" : "border-line bg-white"}`}
-              >
-                {n}
-              </button>
-            ))}
-            <button type="button" onClick={() => setGroupSize(null)} className={`h-11 rounded-full border px-4 text-sm font-semibold ${groupSize === null ? "border-ink bg-ink text-white" : "border-line bg-white"}`}>
-              Not sure
-            </button>
-          </div>
-        </div>
+        {people.length < 20 && (
+          <button type="button" className="mt-3 text-sm font-semibold text-coral-dark" onClick={() => setPeople((ps) => [...ps, { name: "", phone: "" }])}>
+            + Add someone
+          </button>
+        )}
+        <p className="mt-2 text-xs text-ink-faint">The first name is you — the coordinator.</p>
       </Card>
 
       {error && <p className="rounded-2xl bg-busy-soft px-4 py-3 text-sm font-semibold text-rose-800">{error}</p>}

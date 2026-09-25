@@ -22,7 +22,7 @@ export async function POST(req: Request) {
       else if (preset === "12h") target = deadline - 11 * HOUR;
       else if (preset === "passed") target = deadline + HOUR;
       else if (preset === "maybe") {
-        const kb = b.availability.map((a) => a.maybe_known_by).filter(Boolean).sort()[0];
+        const kb = b.dateVotes.map((v) => v.known_by).filter(Boolean).sort()[0];
         if (!kb) throw new AppError(409, "No open maybes right now.");
         target = Math.max(Date.parse(`${kb}T10:00:00+05:30`), Date.now());
       }

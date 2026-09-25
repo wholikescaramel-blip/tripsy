@@ -94,3 +94,123 @@ export function StartPlanningButton({ slug, adminKey }: { slug: string; adminKey
     </div>
   );
 }
+
+async function adminPost(url: string, body: unknown) {
+  const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error ?? "Something went wrong");
+  return json;
+}
+
+/** Riya adds someone to the trip. */
+export function AddPerson({ slug, adminKey }: { slug: string; adminKey: string }) {
+  const router = useRouter();
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <form
+      className="mt-3 flex flex-col gap-2"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setBusy(true);
+        setError(null);
+        try {
+          await adminPost(`/api/t/${slug}/people`, { adminKey, action: "add", name, phone });
+          setName("");
+          setPhone("");
+          router.refresh();
+        } catch (err) {
+          setError(err instanceof Error ? err.message : String(err));
+        }
+        setBusy(false);
+      }}
+    >
+      <div className="flex gap-2">
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Add a name" maxLength={30} className="min-w-0 flex-[1.2] rounded-2xl border border-line bg-white px-3 py-2.5 text-sm outline-none focus:border-coral" />
+        <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone (optional)" inputMode="tel" maxLength={20} className="min-w-0 flex-1 rounded-2xl border border-line bg-white px-3 py-2.5 text-sm outline-none focus:border-coral" />
+        <button disabled={busy || !name.trim()} className="shrink-0 rounded-2xl bg-ink px-4 text-sm font-bold text-white disabled:opacity-40">
+          +
+        </button>
+      </div>
+      {error && <p className="text-sm font-semibold text-busy">{error}</p>}
+    </form>
+  );
+}
+
+export function RemovePerson({ slug, adminKey, memberId, name }: { slug: string; adminKey: string; memberId: string; name: string }) {
+  const router = useRouter();
+  return (
+    <button
+      aria-label={`Remove ${name}`}
+      onClick={async () => {
+        if (!confirm(`Remove ${name} from the trip? Their answers are deleted.`)) return;
+        try {
+          await adminPost(`/api/t/${slug}/people`, { adminKey, action: "remove", memberId });
+        } catch (err) {
+          alert(err instanceof Error ? err.message : String(err));
+        }
+        router.refresh();
+      }}
+      className="h-8 w-8 shrink-0 rounded-full text-ink-faint hover:bg-busy-soft hover:text-busy"
+    >
+      ✕
+    </button>
+  );
+}
+
+/** Riya adds or removes a date option. */
+export function DateOptionControls({ slug, adminKey, options }: { slug: string; adminKey: string; options: { id: string; label: string }[] }) {
+  const router = useRouter();
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const act = async (body: object) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await adminPost(`/api/t/${slug}/options`, { adminKey, ...body });
+      setStart("");
+      setEnd("");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+    setBusy(false);
+  };
+  return (
+    <details className="mt-3">
+      <summary className="cursor-pointer text-sm font-semibold text-coral-dark">Add or remove date options</summary>
+      <div className="mt-3 flex flex-col gap-3">
+        <div className="flex items-end gap-2">
+          <label className="flex-1 text-xs font-semibold">
+            From
+            <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className="mt-1 w-full rounded-2xl border border-line bg-white px-3 py-2 text-sm" />
+          </label>
+          <label className="flex-1 text-xs font-semibold">
+            To
+            <input type="date" value={end} min={start} onChange={(e) => setEnd(e.target.value)} className="mt-1 w-full rounded-2xl border border-line bg-white px-3 py-2 text-sm" />
+          </label>
+          <button disabled={busy || !start || !end} onClick={() => act({ action: "add", start, end })} className="rounded-2xl bg-ink px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40">
+            Add
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {options.map((o) => (
+            <button
+              key={o.id}
+              disabled={busy}
+              onClick={() => confirm(`Remove ${o.label}? Votes on it are deleted.`) && act({ action: "remove", optionId: o.id })}
+              className="rounded-full border border-line bg-white px-3 py-1.5 text-xs font-semibold"
+            >
+              {o.label} ✕
+            </button>
+          ))}
+        </div>
+        {error && <p className="text-sm font-semibold text-busy">{error}</p>}
+      </div>
+    </details>
+  );
+}

@@ -1,25 +1,32 @@
-// In-memory store used when Supabase keys are missing. Lives as long as the server process.
+// In-memory store used when Supabase keys are missing (local dev only). Lives as long as the server process.
 
-import type { AvailabilityRow, ChangeEntry, Member, NudgeLog, Plan, Preferences, Swipe, Trip } from "../types";
+import type { ChangeEntry, DateOption, DateVote, Idea, IdeaSwipe, Member, NudgeLog, Plan, Preferences, Swipe, Trip } from "../types";
 import type { NewPlan, NewTripInput, Store } from "./types";
+
+type WithTrip<T> = T & { trip_id: string };
 
 interface DB {
   trips: Trip[];
   members: Member[];
-  availability: (AvailabilityRow & { trip_id: string })[];
-  preferences: (Preferences & { trip_id: string })[];
+  dateOptions: DateOption[];
+  dateVotes: WithTrip<DateVote>[];
+  ideas: Idea[];
+  ideaSwipes: WithTrip<IdeaSwipe>[];
+  preferences: WithTrip<Preferences>[];
   budgets: Map<string, { min: number; max: number }>;
   plans: Plan[];
-  swipes: (Swipe & { trip_id: string })[];
+  swipes: WithTrip<Swipe>[];
   changes: ChangeEntry[];
   nudges: NudgeLog[];
 }
 
-const g = globalThis as unknown as { __tripsyDb?: DB };
-const db: DB = (g.__tripsyDb ??= {
+const empty = (): DB => ({
   trips: [],
   members: [],
-  availability: [],
+  dateOptions: [],
+  dateVotes: [],
+  ideas: [],
+  ideaSwipes: [],
   preferences: [],
   budgets: new Map(),
   plans: [],
@@ -28,8 +35,12 @@ const db: DB = (g.__tripsyDb ??= {
   nudges: [],
 });
 
+const g = globalThis as unknown as { __tripsyDb2?: DB };
+const db: DB = (g.__tripsyDb2 ??= empty());
+
 const nowIso = () => new Date().toISOString();
 const clone = <T>(x: T): T => structuredClone(x);
+const stamp = (i = 0) => new Date(Date.now() + i).toISOString();
 
 /** Per-person max budget; people without one get the average of those who gave one. */
 export function effectiveMaxes(memberIds: string[], budgets: Map<string, { max: number }>): Map<string, number> | null {
@@ -38,6 +49,23 @@ export function effectiveMaxes(memberIds: string[], budgets: Map<string, { max: 
   const avg = given.reduce((a, b) => a + b, 0) / given.length;
   return new Map(memberIds.map((id) => [id, budgets.get(id)?.max ?? avg]));
 }
+
+function newMember(tripId: string, m: { name: string; phone: string; is_coordinator?: boolean }, order: number): Member {
+  return {
+    id: crypto.randomUUID(),
+    trip_id: tripId,
+    name: m.name,
+    phone: m.phone,
+    is_coordinator: Boolean(m.is_coordinator),
+    sort_order: order,
+    has_budget: false,
+    submitted_at: null,
+    updated_at: null,
+    confirmed_at: null,
+  };
+}
+
+const byTrip = <T extends { trip_id: string }>(rows: T[], id: string) => rows.filter((r) => r.trip_id === id);
 
 export const memoryStore: Store = {
   kind: "memory",
@@ -48,13 +76,16 @@ export const memoryStore: Store = {
     const id = trip.id;
     return clone({
       trip,
-      members: db.members.filter((m) => m.trip_id === id).sort((a, b) => a.sort_order - b.sort_order),
-      availability: db.availability.filter((a) => a.trip_id === id),
-      preferences: db.preferences.filter((p) => p.trip_id === id),
-      plans: db.plans.filter((p) => p.trip_id === id).sort((a, b) => a.created_at.localeCompare(b.created_at)),
-      swipes: db.swipes.filter((s) => s.trip_id === id),
-      changes: db.changes.filter((c) => c.trip_id === id).sort((a, b) => b.created_at.localeCompare(a.created_at)),
-      nudges: db.nudges.filter((n) => n.trip_id === id),
+      members: byTrip(db.members, id).sort((a, b) => a.sort_order - b.sort_order),
+      dateOptions: byTrip(db.dateOptions, id).sort((a, b) => a.start_date.localeCompare(b.start_date)),
+      dateVotes: byTrip(db.dateVotes, id),
+      ideas: byTrip(db.ideas, id).sort((a, b) => a.sort_order - b.sort_order),
+      ideaSwipes: byTrip(db.ideaSwipes, id),
+      preferences: byTrip(db.preferences, id),
+      plans: byTrip(db.plans, id).sort((a, b) => a.created_at.localeCompare(b.created_at)),
+      swipes: byTrip(db.swipes, id),
+      changes: byTrip(db.changes, id).sort((a, b) => b.created_at.localeCompare(a.created_at)),
+      nudges: byTrip(db.nudges, id),
     });
   },
 
@@ -70,38 +101,27 @@ export const memoryStore: Store = {
       blend_round: 0,
       agreed_plan_id: null,
       is_demo: input.is_demo,
-      expected_size: input.expected_size,
       created_at: nowIso(),
     };
     db.trips.push(trip);
-    input.members.forEach((m, i) =>
-      db.members.push({
-        id: crypto.randomUUID(),
-        trip_id: trip.id,
-        name: m.name,
-        phone: m.phone,
-        is_coordinator: m.is_coordinator,
-        sort_order: i,
-        has_budget: false,
-        submitted_at: null,
-        updated_at: null,
-        confirmed_at: null,
-      }),
-    );
+    input.members.forEach((m, i) => db.members.push(newMember(trip.id, m, i)));
     return (await this.getBundle(trip.slug))!;
   },
 
   async deleteTrip(tripId) {
-    const memberIds = new Set(db.members.filter((m) => m.trip_id === tripId).map((m) => m.id));
-    for (const id of memberIds) db.budgets.delete(id);
+    for (const m of byTrip(db.members, tripId)) db.budgets.delete(m.id);
+    const keep = <T extends { trip_id: string }>(rows: T[]) => rows.filter((r) => r.trip_id !== tripId);
     db.trips = db.trips.filter((t) => t.id !== tripId);
-    db.members = db.members.filter((m) => m.trip_id !== tripId);
-    db.availability = db.availability.filter((a) => a.trip_id !== tripId);
-    db.preferences = db.preferences.filter((a) => a.trip_id !== tripId);
-    db.plans = db.plans.filter((a) => a.trip_id !== tripId);
-    db.swipes = db.swipes.filter((a) => a.trip_id !== tripId);
-    db.changes = db.changes.filter((a) => a.trip_id !== tripId);
-    db.nudges = db.nudges.filter((a) => a.trip_id !== tripId);
+    db.members = keep(db.members);
+    db.dateOptions = keep(db.dateOptions);
+    db.dateVotes = keep(db.dateVotes);
+    db.ideas = keep(db.ideas);
+    db.ideaSwipes = keep(db.ideaSwipes);
+    db.preferences = keep(db.preferences);
+    db.plans = keep(db.plans);
+    db.swipes = keep(db.swipes);
+    db.changes = keep(db.changes);
+    db.nudges = keep(db.nudges);
   },
 
   async updateTrip(tripId, patch) {
@@ -118,21 +138,20 @@ export const memoryStore: Store = {
   },
 
   async addMember(tripId, m) {
-    const order = db.members.filter((x) => x.trip_id === tripId).length;
-    const member: Member = {
-      id: crypto.randomUUID(),
-      trip_id: tripId,
-      name: m.name,
-      phone: m.phone,
-      is_coordinator: false,
-      sort_order: order,
-      has_budget: false,
-      submitted_at: null,
-      updated_at: null,
-      confirmed_at: null,
-    };
+    const member = newMember(tripId, m, byTrip(db.members, tripId).length);
     db.members.push(member);
     return clone(member);
+  },
+
+  async removeMember(memberId) {
+    const drop = <T extends { member_id: string }>(rows: T[]) => rows.filter((r) => r.member_id !== memberId);
+    db.members = db.members.filter((m) => m.id !== memberId);
+    db.dateVotes = drop(db.dateVotes);
+    db.ideaSwipes = drop(db.ideaSwipes);
+    db.preferences = drop(db.preferences);
+    db.swipes = drop(db.swipes);
+    db.nudges = drop(db.nudges);
+    db.budgets.delete(memberId);
   },
 
   async updateMember(memberId, patch) {
@@ -140,9 +159,28 @@ export const memoryStore: Store = {
     if (m) Object.assign(m, patch);
   },
 
-  async replaceAvailability(tripId, memberId, rows) {
-    db.availability = db.availability.filter((a) => a.member_id !== memberId);
-    db.availability.push(...rows.map((r) => ({ ...r, member_id: memberId, trip_id: tripId })));
+  async addDateOptions(tripId, options) {
+    options.forEach((o, i) => db.dateOptions.push({ ...o, id: crypto.randomUUID(), trip_id: tripId, created_at: stamp(i) }));
+  },
+
+  async removeDateOption(optionId) {
+    db.dateOptions = db.dateOptions.filter((o) => o.id !== optionId);
+    db.dateVotes = db.dateVotes.filter((v) => v.option_id !== optionId);
+  },
+
+  async upsertDateVote(tripId, vote) {
+    db.dateVotes = db.dateVotes.filter((v) => !(v.option_id === vote.option_id && v.member_id === vote.member_id));
+    db.dateVotes.push({ ...vote, trip_id: tripId, updated_at: nowIso() });
+  },
+
+  async insertIdeas(tripId, ideas) {
+    const start = byTrip(db.ideas, tripId).length;
+    ideas.forEach((idea, i) => db.ideas.push({ ...idea, id: crypto.randomUUID(), trip_id: tripId, sort_order: start + i }));
+  },
+
+  async upsertIdeaSwipe(tripId, swipe) {
+    db.ideaSwipes = db.ideaSwipes.filter((s) => !(s.idea_id === swipe.idea_id && s.member_id === swipe.member_id));
+    db.ideaSwipes.push({ ...swipe, trip_id: tripId });
   },
 
   async upsertPreferences(tripId, prefs) {
@@ -156,24 +194,18 @@ export const memoryStore: Store = {
   },
 
   async budgetFits(tripId, costs) {
-    const ids = db.members.filter((m) => m.trip_id === tripId).map((m) => m.id);
+    const ids = byTrip(db.members, tripId).map((m) => m.id);
     const maxes = effectiveMaxes(ids, db.budgets);
     return costs.map((c) => Object.fromEntries(ids.map((id) => [id, maxes ? c <= maxes.get(id)! : true])));
   },
 
   async budgetCeiling(tripId) {
-    const ids = db.members.filter((m) => m.trip_id === tripId).map((m) => m.id);
-    const maxes = effectiveMaxes(ids, db.budgets);
+    const maxes = effectiveMaxes(byTrip(db.members, tripId).map((m) => m.id), db.budgets);
     return maxes ? Math.min(...maxes.values()) : null;
   },
 
   async insertPlans(plans: NewPlan[]) {
-    const out = plans.map((p, i) => ({
-      ...p,
-      id: crypto.randomUUID(),
-      // Keep insertion order stable even within the same millisecond.
-      created_at: new Date(Date.now() + i).toISOString(),
-    }));
+    const out = plans.map((p, i) => ({ ...p, id: crypto.randomUUID(), created_at: stamp(i) }));
     db.plans.push(...out);
     return clone(out);
   },
@@ -193,6 +225,7 @@ export const memoryStore: Store = {
   },
 
   async logNudge(n) {
+    db.nudges = db.nudges.filter((x) => !(x.member_id === n.member_id && x.nudge_kind === n.nudge_kind));
     db.nudges.push({ ...n, sent_at: nowIso() });
   },
 };

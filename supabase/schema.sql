@@ -5,7 +5,7 @@
 
 create extension if not exists pgcrypto;
 
-drop table if exists nudge_log, changes, swipes, plans, member_budgets, preferences, availability, members, trips cascade;
+drop table if exists nudge_log, changes, swipes, plans, member_budgets, preferences, idea_swipes, ideas, date_votes, date_options, availability, members, trips cascade;
 drop function if exists set_budget(uuid, int, int);
 drop function if exists budget_fits(uuid, int[]);
 drop function if exists budget_ceiling(uuid);
@@ -22,7 +22,6 @@ create table trips (
   blend_round int not null default 0,
   agreed_plan_id uuid,
   is_demo boolean not null default false,
-  expected_size int,
   created_at timestamptz not null default now()
 );
 alter table trips enable row level security;
@@ -42,26 +41,60 @@ create table members (
 alter table members enable row level security;
 create index on members(trip_id);
 
-create table availability (
+create table date_options (
+  id uuid primary key default gen_random_uuid(),
   trip_id uuid not null references trips(id) on delete cascade,
-  member_id uuid not null references members(id) on delete cascade,
-  day date not null,
-  status text not null check (status in ('free', 'busy', 'maybe')),
-  maybe_known_by date
+  start_date date not null,
+  end_date date not null,
+  added_by text not null default 'app' check (added_by in ('app', 'coordinator')),
+  created_at timestamptz not null default clock_timestamp()
 );
-alter table availability add primary key (member_id, day);
-alter table availability enable row level security;
-create index on availability(trip_id);
+alter table date_options enable row level security;
+create index on date_options(trip_id);
+
+create table date_votes (
+  trip_id uuid not null references trips(id) on delete cascade,
+  option_id uuid not null references date_options(id) on delete cascade,
+  member_id uuid not null references members(id) on delete cascade,
+  vote text not null check (vote in ('yes', 'no', 'maybe')),
+  known_by date,
+  updated_at timestamptz not null default now()
+);
+alter table date_votes add primary key (option_id, member_id);
+alter table date_votes enable row level security;
+create index on date_votes(trip_id);
+
+create table ideas (
+  id uuid primary key default gen_random_uuid(),
+  trip_id uuid not null references trips(id) on delete cascade,
+  destination text not null,
+  region text not null default '',
+  pitch text not null default '',
+  highlights text[] not null default '{}',
+  emoji text not null default '🧭',
+  cost_estimate int not null default 0,
+  tags text[] not null default '{}',
+  sort_order int not null default 0
+);
+alter table ideas enable row level security;
+create index on ideas(trip_id);
+
+create table idea_swipes (
+  trip_id uuid not null references trips(id) on delete cascade,
+  idea_id uuid not null references ideas(id) on delete cascade,
+  member_id uuid not null references members(id) on delete cascade,
+  liked boolean not null
+);
+alter table idea_swipes add primary key (idea_id, member_id);
+alter table idea_swipes enable row level security;
+create index on idea_swipes(trip_id);
 
 create table preferences (
   trip_id uuid not null references trips(id) on delete cascade,
   member_id uuid primary key references members(id) on delete cascade,
   home_city text not null default '',
-  vibes text[] not null default '{}',
-  activities text[] not null default '{}',
   vetoes text[] not null default '{}',
-  veto_notes text not null default '',
-  wishes text not null default ''
+  veto_notes text not null default ''
 );
 alter table preferences enable row level security;
 create index on preferences(trip_id);
@@ -139,7 +172,7 @@ alter table nudge_log enable row level security;
 do $$
 declare t text;
 begin
-  foreach t in array array['trips','members','availability','preferences','plans','swipes','changes','nudge_log'] loop
+  foreach t in array array['trips','members','date_options','date_votes','ideas','idea_swipes','preferences','plans','swipes','changes','nudge_log'] loop
     execute format('create policy "anon all %1$s" on %1$I for all to anon, authenticated using (true) with check (true)', t);
   end loop;
 end $$;

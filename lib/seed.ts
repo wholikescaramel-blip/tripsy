@@ -2,108 +2,68 @@
 import "server-only";
 
 import { store } from "./store";
-import { AppError, decide, load, saveAnswers, setConfirmed, type AnswersInput } from "./service";
-import { addDays, istDay, monthDays } from "./time";
-import type { DayStatus } from "./types";
+import { sampleIdeas } from "./sample-plans";
+import {
+  AppError,
+  createTrip,
+  decide,
+  load,
+  saveBudget,
+  saveHardPasses,
+  setConfirmed,
+  swipeIdea,
+  voteDate,
+} from "./service";
+import { istDay } from "./time";
+import type { DateVoteValue, TripBundle } from "./types";
 
 export const DEMO_SLUG = "demo";
 export const DEMO_ADMIN_KEY = "demo";
 
-type Pattern = Record<number, DayStatus>; // day-of-month -> status (unlisted = busy)
-
-function range(from: number, to: number, status: DayStatus): Pattern {
-  const out: Pattern = {};
-  for (let d = from; d <= to; d++) out[d] = status;
-  return out;
+interface DemoAnswers {
+  votes: DateVoteValue[]; // one per date option, in date order ("maybe" = knows next week-ish)
+  likes: string[]; // idea destinations they swipe right on
+  budget: "low" | "mid" | "high";
+  city: string;
+  passes: string[];
+  notes?: string;
 }
 
-function toAvailability(monthStart: string, pattern: Pattern, knownBy?: string) {
-  return monthDays(monthStart)
-    .map((day) => ({ day, status: pattern[Number(day.slice(8))] }))
-    .filter((a) => a.status)
-    .map((a) => ({ ...a, maybe_known_by: a.status === "maybe" ? (knownBy ?? null) : null }));
-}
-
-interface DemoPerson {
-  name: string;
-  phone: string;
-  answers?: (month: string, knownBy: string) => AnswersInput;
-}
-
-const PEOPLE: DemoPerson[] = [
+const PEOPLE: { name: string; phone: string; answers?: DemoAnswers }[] = [
   {
     name: "Riya",
     phone: "+91 98200 11111",
-    answers: (month) => ({
-      availability: toAvailability(month, { ...range(6, 19, "free"), ...range(24, 31, "free") }),
-      home_city: "Mumbai",
-      vibes: ["beach", "chill", "foodie"],
-      activities: ["beach_time", "cafes", "food_crawl", "villa"],
-      vetoes: ["early_mornings", "hostels"],
-      veto_notes: "",
-      wishes: "Somewhere we can actually talk, not rush around.",
-      budget: { min: 12000, max: 25000 },
-    }),
+    answers: { votes: ["yes", "yes", "yes", "no", "yes"], likes: ["North Goa", "Alleppey backwaters", "Pondicherry", "Lonavala villa weekend"], budget: "high", city: "Mumbai", passes: ["hostels"] },
   },
   {
     name: "Siddharth",
     phone: "+91 98450 22222",
-    answers: (month, knownBy) => ({
-      availability: toAvailability(month, { ...range(6, 11, "free"), ...range(12, 14, "maybe"), ...range(15, 19, "free"), 24: "free", ...range(28, 31, "free") }, knownBy),
-      home_city: "Bengaluru",
-      vibes: ["adventure", "nature", "beach"],
-      activities: ["trekking", "water_sports", "stargazing", "photography"],
-      vetoes: ["cold"],
-      veto_notes: "",
-      wishes: "One proper adventure day please!",
-      budget: { min: 15000, max: 30000 },
-    }),
+    answers: { votes: ["yes", "maybe", "yes", "no", "yes"], likes: ["Coorg", "Rishikesh", "Hampi", "North Goa"], budget: "high", city: "Bengaluru", passes: ["cold"] },
   },
   {
     name: "Karan",
     phone: "+91 98220 33333",
-    answers: (month) => ({
-      availability: toAvailability(month, { ...range(8, 19, "free"), ...range(24, 31, "free") }),
-      home_city: "Pune",
-      vibes: ["party", "foodie", "chill"],
-      activities: ["nightlife", "food_crawl", "villa", "boat"],
-      vetoes: ["flights"],
-      veto_notes: "",
-      wishes: "",
-      budget: { min: 8000, max: 15000 },
-    }),
+    answers: { votes: ["yes", "yes", "no", "yes", "yes"], likes: ["North Goa", "Lonavala villa weekend", "Alleppey backwaters", "Udaipur"], budget: "mid", city: "Pune", passes: ["flights"] },
   },
   {
     name: "Aisha",
     phone: "+91 98110 44444",
-    answers: (month) => ({
-      availability: toAvailability(month, { ...range(1, 17, "free"), ...range(24, 31, "free") }),
-      home_city: "Delhi",
-      vibes: ["culture", "chill", "wellness"],
-      activities: ["heritage", "cafes", "spa", "shopping"],
-      vetoes: ["nightlife", "camping"],
-      veto_notes: "no seafood trail",
-      wishes: "Good coffee and one slow morning.",
-      budget: { min: 10000, max: 22000 },
-    }),
+    answers: { votes: ["yes", "yes", "yes", "yes", "no"], likes: ["Udaipur", "Pondicherry", "Alleppey backwaters", "Coorg"], budget: "mid", city: "Delhi", passes: ["nightlife", "camping"], notes: "no seafood trail" },
   },
-  // Preethi hasn't filled in the form yet — the nudges are for them.
-  {
-    name: "Preethi",
-    phone: "+91 98400 55555",
-  },
+  // Preethi hasn't answered yet — the nudges are for them.
+  { name: "Preethi", phone: "+91 98400 55555" },
 ];
 
-export const PREETHI_ANSWERS = (month: string): AnswersInput => ({
-  availability: toAvailability(month, { ...range(1, 27, "free") }),
-  home_city: "Chennai",
-  vibes: ["beach", "foodie", "culture"],
-  activities: ["beach_time", "food_crawl", "photography", "boat"],
-  vetoes: ["trekking"],
-  veto_notes: "",
-  wishes: "",
-  budget: { min: 10000, max: 20000 },
-});
+const PREETHI: DemoAnswers = { votes: ["yes", "yes", "yes", "no", "yes"], likes: ["North Goa", "Pondicherry", "Alleppey backwaters", "Hampi"], budget: "mid", city: "Chennai", passes: ["trekking"] };
+
+async function answer(b: TripBundle, memberId: string, a: DemoAnswers, now: Date) {
+  for (const [i, o] of b.dateOptions.entries()) {
+    await voteDate(DEMO_SLUG, memberId, o.id, a.votes[i] ?? "yes", "few_days", now);
+  }
+  for (const idea of b.ideas) await swipeIdea(DEMO_SLUG, memberId, idea.id, a.likes.includes(idea.destination));
+  await saveBudget(DEMO_SLUG, memberId, a.budget, a.city, now);
+  await saveHardPasses(DEMO_SLUG, memberId, a.passes, a.notes ?? "", now);
+}
 
 export async function seedDemo() {
   const existing = await store.getBundle(DEMO_SLUG);
@@ -111,23 +71,21 @@ export async function seedDemo() {
 
   const now = new Date();
   const today = istDay(now);
-  const nextMonth = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 1)).toISOString().slice(0, 10);
-  const deadline = new Date(now.getTime() + 60 * 3_600_000).toISOString(); // 60h away: 48h nudges start after 12h
-  const knownBy = addDays(today, 2);
-
-  const b = await store.createTrip({
+  const nextMonth = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 1)).toISOString().slice(0, 7);
+  await createTrip({
     slug: DEMO_SLUG,
-    admin_key: DEMO_ADMIN_KEY,
+    adminKey: DEMO_ADMIN_KEY,
     name: "Five Friends, One Trip",
-    target_month: nextMonth,
-    deadline,
-    is_demo: true,
-    expected_size: PEOPLE.length,
-    members: PEOPLE.map((p, i) => ({ name: p.name, phone: p.phone, is_coordinator: i === 0 })),
+    month: nextMonth,
+    deadline: new Date(now.getTime() + 60 * 3_600_000).toISOString(), // 60h away: 48h nudges start after 12h
+    isDemo: true,
+    people: PEOPLE.map((p) => ({ name: p.name, phone: p.phone })),
+    ideas: sampleIdeas(8), // fixed cards so the demo is the same every time
   });
+  const b = await load(DEMO_SLUG);
   for (const p of PEOPLE) {
-    const m = b.members.find((x) => x.name === p.name)!;
-    if (p.answers) await saveAnswers(DEMO_SLUG, m.id, p.answers(nextMonth, knownBy), now);
+    if (!p.answers) continue;
+    await answer(b, b.members.find((m) => m.name === p.name)!.id, p.answers, now);
   }
   return { slug: DEMO_SLUG, adminKey: DEMO_ADMIN_KEY };
 }
@@ -135,52 +93,45 @@ export async function seedDemo() {
 /** Demo-only shortcuts, so a single tester can play all 5 people. */
 export async function demoAction(action: string, now: Date) {
   const b = await load(DEMO_SLUG);
-  const byName = (n: string) => b.members.find((m) => m.name === n)!;
-  const month = b.trip.target_month;
+  const byName = (n: string) => {
+    const m = b.members.find((x) => x.name === n);
+    if (!m) throw new AppError(409, `${n} isn't on the demo trip any more — reset the demo.`);
+    return m;
+  };
 
   switch (action) {
-    case "fill-preethi": {
-      await saveAnswers(DEMO_SLUG, byName("Preethi").id, PREETHI_ANSWERS(month), now);
-      return "Preethi filled in their answers.";
-    }
+    case "fill-preethi":
+      await answer(b, byName("Preethi").id, PREETHI, now);
+      return "Preethi answered.";
     case "karan-busy": {
-      // Karan can suddenly no longer do the 9th–10th: breaks any plan on those dates.
-      const karan = byName("Karan");
-      const avail = b.availability
-        .filter((a) => a.member_id === karan.id)
-        .map((a) => (["09", "10"].includes(a.day.slice(8)) ? { ...a, status: "busy" as const } : a));
-      const prefs = b.preferences.find((p) => p.member_id === karan.id)!;
-      await saveAnswers(DEMO_SLUG, karan.id, { ...prefs, availability: avail, budget: null }, now);
-      return "Karan is now busy on the 9th and 10th.";
+      // Karan can no longer do the first weekend: breaks any plan on those dates.
+      const first = b.dateOptions[0];
+      await voteDate(DEMO_SLUG, byName("Karan").id, first.id, "no", null, now);
+      return "Karan can no longer do the first weekend.";
     }
     case "sid-maybe-yes":
     case "sid-maybe-no": {
       const sid = byName("Siddharth");
-      const to = action === "sid-maybe-yes" ? "free" : "busy";
-      const avail = b.availability
-        .filter((a) => a.member_id === sid.id)
-        .map((a) => (a.status === "maybe" ? { ...a, status: to as DayStatus, maybe_known_by: null } : a));
-      const prefs = b.preferences.find((p) => p.member_id === sid.id)!;
-      await saveAnswers(DEMO_SLUG, sid.id, { ...prefs, availability: avail, budget: null }, now);
-      return `Siddharth's maybe turned into a ${to === "free" ? "yes" : "no"}.`;
+      const maybes = b.dateVotes.filter((v) => v.member_id === sid.id && v.vote === "maybe");
+      if (!maybes.length) throw new AppError(409, "Siddharth has no open maybe.");
+      for (const v of maybes) await voteDate(DEMO_SLUG, sid.id, v.option_id, action === "sid-maybe-yes" ? "yes" : "no", null, now);
+      return `Siddharth's maybe turned into a ${action === "sid-maybe-yes" ? "yes" : "no"}.`;
     }
     case "aisha-veto-beach": {
       const aisha = byName("Aisha");
-      const prefs = b.preferences.find((p) => p.member_id === aisha.id)!;
-      const avail = b.availability.filter((a) => a.member_id === aisha.id);
-      await saveAnswers(DEMO_SLUG, aisha.id, { ...prefs, vetoes: [...new Set([...prefs.vetoes, "beaches"])], availability: avail, budget: null }, now);
-      return "Aisha added 'Beaches' as a hard no.";
+      const prefs = b.preferences.find((p) => p.member_id === aisha.id);
+      await saveHardPasses(DEMO_SLUG, aisha.id, [...new Set([...(prefs?.vetoes ?? []), "beaches"])], prefs?.veto_notes ?? "", now);
+      return "Aisha added 'Beaches' as a hard pass.";
     }
     case "swipe-split":
     case "swipe-yes": {
-      if (!["voting", "stuck"].includes(b.trip.status)) throw new AppError(409, "No voting going on right now.");
+      if (!["voting", "stuck"].includes(b.trip.status)) throw new AppError(409, "No plans to swipe on right now.");
       const current = b.plans.filter((p) => p.status === "active" && p.round === b.trip.blend_round);
-      const members = b.members;
       for (const [i, p] of current.entries()) {
-        for (const [j, m] of members.entries()) {
+        for (const [j, m] of b.members.entries()) {
           if (b.swipes.some((s) => s.plan_id === p.id && s.member_id === m.id)) continue;
-          // Split: plan i is liked by 3 people (rotating), so nothing is unanimous.
-          const accept = action === "swipe-yes" ? true : (j + i) % members.length < 3;
+          // Split: each plan gets 3 yeses (rotating), so nothing is unanimous.
+          const accept = action === "swipe-yes" ? true : (j + i) % b.members.length < 3;
           await store.upsertSwipe(b.trip.id, {
             plan_id: p.id,
             member_id: m.id,

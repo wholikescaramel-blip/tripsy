@@ -1,11 +1,11 @@
 // Turns a TripBundle into what the pages render. Pure, serialisable, and never contains budgets.
 import "server-only";
 
+import type { DatesResult } from "./dates";
 import { checkPlan } from "./rules";
 import { assumeMissing, datesFor, everyoneAnswered, isDeadlinePassed, readyToPlan } from "./service";
-import type { DatesResult } from "./dates";
 import { istDay } from "./time";
-import type { ChangeEntry, Plan, TripBundle, TripStatus } from "./types";
+import type { ChangeEntry, Idea, Plan, TripBundle, TripStatus } from "./types";
 
 export interface MemberView {
   id: string;
@@ -16,7 +16,14 @@ export interface MemberView {
   updatedAt: string | null;
   confirmed: boolean;
   homeCity: string;
+  hasPhone: boolean;
   phone?: string; // admin only
+  progress: { dates: number; ideas: number; budget: boolean; passes: boolean };
+}
+
+export interface IdeaView extends Idea {
+  likedBy: string[];
+  passedBy: string[];
 }
 
 export interface PlanView extends Plan {
@@ -39,14 +46,15 @@ export interface TripView {
     blendRound: number;
     agreedPlanId: string | null;
     isDemo: boolean;
-    expectedSize: number | null;
   };
   now: string;
   today: string;
   deadlinePassed: boolean;
   members: MemberView[];
+  totals: { dates: number; ideas: number };
   dates: DatesResult;
-  openMaybes: { memberId: string; name: string; days: string[]; knownBy: string | null; due: boolean }[];
+  openMaybes: { memberId: string; name: string; ranges: { start: string; end: string }[]; knownBy: string | null; due: boolean }[];
+  ideas: IdeaView[];
   currentPlans: PlanView[];
   earlierPlans: PlanView[];
   rejectedPlans: PlanView[];
@@ -72,7 +80,14 @@ export function buildView(b: TripBundle, now: Date, opts: { admin?: boolean } = 
     updatedAt: m.updated_at,
     confirmed: Boolean(m.confirmed_at),
     homeCity: b.preferences.find((p) => p.member_id === m.id)?.home_city ?? "",
+    hasPhone: m.phone.replace(/\D/g, "").length >= 8,
     ...(opts.admin ? { phone: m.phone } : {}),
+    progress: {
+      dates: b.dateVotes.filter((v) => v.member_id === m.id && b.dateOptions.some((o) => o.id === v.option_id)).length,
+      ideas: b.ideaSwipes.filter((s) => s.member_id === m.id).length,
+      budget: m.has_budget,
+      passes: Boolean(m.submitted_at),
+    },
   }));
 
   const planView = (p: Plan): PlanView => {
@@ -101,15 +116,24 @@ export function buildView(b: TripBundle, now: Date, opts: { admin?: boolean } = 
   }
 
   const today = istDay(now);
-  const maybeRows = b.availability.filter((a) => a.status === "maybe");
   const openMaybes = b.members
     .map((m) => {
-      const rows = maybeRows.filter((r) => r.member_id === m.id);
+      const rows = b.dateVotes.filter((v) => v.member_id === m.id && v.vote === "maybe");
       if (!rows.length) return null;
-      const knownBy = rows.map((r) => r.maybe_known_by).filter(Boolean).sort()[0] ?? null;
-      return { memberId: m.id, name: m.name, days: rows.map((r) => r.day).sort(), knownBy, due: Boolean(knownBy && knownBy <= today) };
+      const knownBy = rows.map((r) => r.known_by).filter(Boolean).sort()[0] ?? null;
+      const ranges = rows
+        .map((r) => b.dateOptions.find((o) => o.id === r.option_id))
+        .filter((o) => o !== undefined)
+        .map((o) => ({ start: o.start_date, end: o.end_date }));
+      return { memberId: m.id, name: m.name, ranges, knownBy, due: Boolean(knownBy && knownBy <= today) };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
+
+  const ideas: IdeaView[] = b.ideas.map((i) => ({
+    ...i,
+    likedBy: b.ideaSwipes.filter((s) => s.idea_id === i.id && s.liked).map((s) => name(s.member_id)),
+    passedBy: b.ideaSwipes.filter((s) => s.idea_id === i.id && !s.liked).map((s) => name(s.member_id)),
+  }));
 
   return {
     trip: {
@@ -122,14 +146,15 @@ export function buildView(b: TripBundle, now: Date, opts: { admin?: boolean } = 
       blendRound: b.trip.blend_round,
       agreedPlanId: b.trip.agreed_plan_id,
       isDemo: b.trip.is_demo,
-      expectedSize: b.trip.expected_size,
     },
     now: now.toISOString(),
     today,
     deadlinePassed: passed,
     members,
+    totals: { dates: b.dateOptions.length, ideas: b.ideas.length },
     dates,
     openMaybes,
+    ideas,
     currentPlans: plans.filter((p) => p.isCurrent),
     earlierPlans: active.filter((p) => !p.isCurrent),
     rejectedPlans: plans.filter((p) => p.status === "rejected" || p.status === "broken"),

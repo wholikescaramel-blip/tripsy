@@ -10,11 +10,12 @@ export const metadata = { title: "Setup status — Tripsy" };
 type Check = { label: string; ok: boolean | null; detail: string; fix?: string };
 
 async function databaseChecks(): Promise<Check[]> {
+  const urlOk = Boolean(supabaseUrl?.value);
   const checks: Check[] = [
     {
       label: "Supabase URL",
-      ok: Boolean(supabaseUrl),
-      detail: supabaseUrl ? `Found in ${supabaseUrl.name} (${new URL(supabaseUrl.value).host})` : "Not set",
+      ok: urlOk,
+      detail: supabaseUrl ? (urlOk ? `Found in ${supabaseUrl.name} → ${new URL(supabaseUrl.value).host}${supabaseUrl.raw.trim() !== supabaseUrl.value ? " (tidied up automatically)" : ""}` : `${supabaseUrl.name} is set but isn't a web address (starts with “${supabaseUrl.raw.slice(0, 12)}…”)`) : "Not set",
       fix: "Add NEXT_PUBLIC_SUPABASE_URL = your Project URL (Supabase → Project Settings → Data API), e.g. https://abcd.supabase.co",
     },
     {
@@ -28,15 +29,23 @@ async function databaseChecks(): Promise<Check[]> {
       fix: "Add NEXT_PUBLIC_SUPABASE_ANON_KEY = your publishable key (sb_publishable_…) from Supabase → Project Settings → API Keys",
     },
   ];
-  if (!hasSupabase) return checks;
+  if (!hasSupabase || !urlOk) return checks;
   const sb = createClient(supabaseUrl!.value, supabaseKey!.value, { auth: { persistSession: false } });
   try {
-    const { error } = await sb.from("trips").select("id, expected_size").limit(1);
+    // One query per table the app uses; the first error tells you what's missing.
+    let error: { message: string } | null = null;
+    for (const t of ["trips", "members", "date_options", "date_votes", "ideas", "idea_swipes", "preferences", "plans", "swipes", "changes", "nudge_log"]) {
+      const res = await sb.from(t).select("*").limit(1);
+      if (res.error) {
+        error = { message: `${t}: ${res.error.message}` };
+        break;
+      }
+    }
     checks.push({
       label: "Database tables",
       ok: !error,
-      detail: error ? error.message : "Tables found and readable",
-      fix: "Run supabase/schema.sql in Supabase → SQL Editor (click “Run without RLS” — the file enables RLS itself).",
+      detail: error ? error.message : "All 11 tables found and readable",
+      fix: "Run the latest supabase/schema.sql in Supabase → SQL Editor (click “Run without RLS” — the file enables RLS itself).",
     });
     const { error: rpcError } = await sb.rpc("budget_ceiling", { p_trip: "00000000-0000-0000-0000-000000000000" });
     checks.push({

@@ -1,18 +1,18 @@
 import Link from "next/link";
-import { CopyLink, FreshPlansButton, NudgeButton, StartPlanningButton } from "@/components/AdminBits";
+import { AddPerson, CopyLink, DateOptionControls, FreshPlansButton, NudgeButton, RemovePerson, StartPlanningButton } from "@/components/AdminBits";
 import { AutoPlanner } from "@/components/AutoPlanner";
 import { Countdown } from "@/components/Countdown";
 import { DemoPanel } from "@/components/DemoPanel";
-import { ChangeFeed, DatesPanel, LockStatus } from "@/components/Panels";
+import { ChangeFeed, DatesPanel, IdeasPanel, LockStatus, StepChips } from "@/components/Panels";
 import { PlanCard } from "@/components/PlanCard";
 import { RefreshOnFocus } from "@/components/RefreshOnFocus";
 import { Avatar, Card, Empty, Pill, ProgressRing, SectionTitle, Stepper } from "@/components/ui";
 import { timeOffsetHours } from "@/lib/clock";
-import { computeNudges } from "@/lib/nudges";
+import { computeNudges, waLink, waShare } from "@/lib/nudges";
 import { tripPage } from "@/lib/page-data";
 import { MAX_BLEND_ROUNDS } from "@/lib/service";
-import { fmtDateTime, fmtDay, fmtMonth, fmtRange, inr, relative } from "@/lib/time";
-import { waShare } from "@/lib/nudges";
+import { fmtDateTime, fmtDay, fmtMonth, fmtRange, inr } from "@/lib/time";
+import type { PlanView } from "@/lib/view";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Coordinator dashboard — Tripsy" };
@@ -41,7 +41,8 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
   const idx = (id: string) => view.members.findIndex((m) => m.id === id);
   const members = view.members.map((m) => ({ id: m.id, name: m.name }));
   const status = view.trip.status;
-  const groupMsg = `✈️ ${view.trip.name}: tap the link, pick your name and mark your free days for ${fmtMonth(view.trip.targetMonth)}. ${tripUrl}`;
+  const frozen = status === "confirmed";
+  const groupMsg = `✈️ ${view.trip.name}: tap the link, tap your name, say yes/no to a few dates and swipe some trip ideas for ${fmtMonth(view.trip.targetMonth)}. 1 minute! ${tripUrl}`;
 
   return (
     <main className="flex flex-col gap-5 pt-6">
@@ -50,7 +51,7 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold text-white/60">{coordinator?.name ?? "Coordinator"}&apos;s dashboard</p>
           <Pill tone="coral" className="!bg-white/10 !text-white">
-            {status === "stuck" ? "needs a decision" : status}
+            {status === "stuck" ? "needs a chat" : status}
           </Pill>
         </div>
         <h1 className="mt-1 font-display text-3xl leading-tight font-extrabold">{view.trip.name}</h1>
@@ -78,9 +79,7 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
 
       <Stepper status={status} />
 
-      {view.trip.isDemo && (
-        <DemoPanel offsetHours={await timeOffsetHours()} links={view.members.map((m) => ({ name: m.name, href: `/t/${slug}/${m.id}` }))} />
-      )}
+      {view.trip.isDemo && <DemoPanel offsetHours={await timeOffsetHours()} links={view.members.map((m) => ({ name: m.name, href: `/t/${slug}/${m.id}` }))} />}
 
       {/* 1. Nudges due now */}
       <Card className={due.length ? "border-2 !border-coral/40" : ""}>
@@ -88,23 +87,19 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
           Nudges due now
         </SectionTitle>
         {due.length === 0 ? (
-          <p className="text-sm text-ink-soft">Nobody needs chasing right now. The app checks every time you open this page.</p>
+          <p className="text-sm text-ink-soft">Nobody needs chasing right now. This updates every time you open the page.</p>
         ) : (
           <ul className="flex flex-col gap-3">
             {due.map((n) => (
-              <li key={`${n.logMemberId}-${n.logKey}`} className={`rounded-2xl p-3 ${n.urgent ? "bg-coral/10" : "bg-sand"}`}>
+              <li key={`${n.member.id}-${n.logKey}`} className={`rounded-2xl p-3 ${n.urgent ? "bg-coral/10" : "bg-sand"}`}>
                 <div className="flex items-center gap-3">
-                  {n.member ? (
-                    <Avatar name={n.member.name} index={idx(n.member.id)} size={40} />
-                  ) : (
-                    <span className="flex h-10 w-10 items-center justify-center rounded-full bg-free text-lg">👥</span>
-                  )}
+                  <Avatar name={n.member.name} index={idx(n.member.id)} size={40} />
                   <div className="min-w-0 flex-1">
-                    <p className="font-semibold">{n.member?.name ?? "Group chat"}</p>
+                    <p className="font-semibold">{n.member.name}</p>
                     <p className="text-xs font-semibold text-coral-dark">{n.title}</p>
-                    {n.member && !n.member.phone && <p className="text-[11px] text-ink-faint">No number saved — you&apos;ll pick them in WhatsApp</p>}
+                    {!n.member.phone.replace(/\D/g, "") && <p className="text-[11px] text-ink-faint">No number saved — you&apos;ll pick them in WhatsApp</p>}
                   </div>
-                  <NudgeButton slug={slug} adminKey={key} memberId={n.logMemberId} kind={n.logKey} href={n.waLink} />
+                  <NudgeButton slug={slug} adminKey={key} memberId={n.member.id} kind={n.logKey} href={n.waLink} />
                 </div>
                 <p className="mt-2 rounded-xl bg-white/70 p-2.5 text-xs text-ink-soft">&ldquo;{n.message}&rdquo;</p>
               </li>
@@ -125,61 +120,65 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
         )}
       </Card>
 
-      {/* 2. Who has submitted */}
+      {/* 2. People */}
       <Card>
-        <SectionTitle emoji="📝">Who&apos;s in</SectionTitle>
+        <SectionTitle emoji="👯">People</SectionTitle>
         <div className="mb-4 flex items-center gap-4">
           <div className="relative">
-            <ProgressRing value={submitted} total={Math.max(view.trip.expectedSize ?? 0, view.members.length)} size={60} />
+            <ProgressRing value={submitted} total={view.members.length} size={60} />
             <span className="absolute inset-0 flex items-center justify-center font-display text-sm font-bold">
-              {submitted}/{Math.max(view.trip.expectedSize ?? 0, view.members.length)}
+              {submitted}/{view.members.length}
             </span>
           </div>
           <p className="text-sm text-ink-soft">
-            {view.members.length}
-            {view.trip.expectedSize ? ` of ~${view.trip.expectedSize}` : ""} joined, {submitted} answered.{" "}
-            {view.members.length === 1
-              ? "Share the group link — friends add themselves."
-              : submitted === view.members.length
-              ? "Everyone who joined has answered 🎉"
+            {submitted === view.members.length
+              ? "Everyone has answered 🎉"
               : view.deadlinePassed
-                ? "Deadline passed — anyone missing is assumed free every day, no hard no's, average budget."
-                : "Anyone missing gets nudged at 48h, 24h and 12h before the deadline."}
+                ? "Deadline passed — anyone missing is counted in for every date, no hard passes, average budget."
+                : "Anyone missing gets nudged 48h, 24h and 12h before the deadline."}
           </p>
         </div>
-        <ul className="flex flex-col gap-2">
-          {view.members.map((m, i) => (
-            <li key={m.id} className="flex items-center gap-3">
-              <Avatar name={m.name} index={i} size={32} dim={!m.submitted && !m.assumed} />
-              <span className="flex-1 text-sm font-semibold">
-                {m.name}
-                {m.homeCity && <span className="ml-1 font-normal text-ink-faint">· {m.homeCity}</span>}
-              </span>
-              {m.submitted ? (
-                <span className="text-xs text-ink-soft">updated {m.updatedAt ? relative(m.updatedAt, new Date()) : ""}</span>
-              ) : m.assumed ? (
-                <Pill tone="maybe">assumed free</Pill>
-              ) : (
-                <Pill tone="neutral">not yet</Pill>
-              )}
-            </li>
-          ))}
+        <ul className="flex flex-col gap-3">
+          {view.members.map((m, i) => {
+            const personal = `${tripUrl}/${m.id}`;
+            const invite = `Hey ${m.name}! ✈️ Planning "${view.trip.name}" — tap here (it's already you): ${personal}`;
+            return (
+              <li key={m.id} className="flex items-center gap-3">
+                <Avatar name={m.name} index={i} size={36} dim={!m.submitted && !m.assumed} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold">
+                    {m.name}
+                    {m.isCoordinator && <span className="ml-1 text-[11px] font-semibold text-coral-dark">you</span>}
+                    {m.homeCity && <span className="ml-1 font-normal text-ink-faint">· {m.homeCity}</span>}
+                  </p>
+                  {m.submitted ? <span className="text-xs font-semibold text-emerald-700">✓ all done</span> : m.assumed ? <Pill tone="maybe">counted in</Pill> : <StepChips m={m} totals={view.totals} />}
+                </div>
+                {!m.isCoordinator && !frozen && (
+                  <>
+                    <a href={waLink(m.phone ?? "", invite)} target="_blank" rel="noreferrer" className="shrink-0 rounded-full bg-free-soft px-3 py-1.5 text-xs font-bold text-emerald-800">
+                      💬 Link
+                    </a>
+                    <RemovePerson slug={slug} adminKey={key} memberId={m.id} name={m.name} />
+                  </>
+                )}
+              </li>
+            );
+          })}
         </ul>
+        {!frozen && <AddPerson slug={slug} adminKey={key} />}
       </Card>
 
       {/* 3. Open maybes */}
-      <Card>
-        <SectionTitle emoji="🤔">Open maybes</SectionTitle>
-        {view.openMaybes.length === 0 ? (
-          <p className="text-sm text-ink-soft">No open maybes.</p>
-        ) : (
+      {view.openMaybes.length > 0 && (
+        <Card>
+          <SectionTitle emoji="🤔">Open maybes</SectionTitle>
           <ul className="flex flex-col gap-2">
             {view.openMaybes.map((m) => (
               <li key={m.memberId} className={`flex items-start gap-3 rounded-2xl p-3 ${m.due ? "bg-maybe-soft" : "bg-sand"}`}>
                 <Avatar name={m.name} index={idx(m.memberId)} size={32} />
                 <div className="flex-1 text-sm">
                   <p className="font-semibold">{m.name}</p>
-                  <p className="text-ink-soft">{m.days.map((d) => fmtDay(d)).join(", ")}</p>
+                  <p className="text-ink-soft">{m.ranges.map((r) => fmtRange(r.start, r.end)).join(", ")}</p>
                 </div>
                 <span className={`text-xs font-bold ${m.due ? "text-amber-800" : "text-ink-soft"}`}>
                   {m.knownBy ? (m.due ? `due ${fmtDay(m.knownBy)} ⚠️` : `knows by ${fmtDay(m.knownBy)}`) : "no date"}
@@ -187,23 +186,32 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
               </li>
             ))}
           </ul>
-        )}
-      </Card>
+        </Card>
+      )}
 
-      {/* 4. Common dates */}
-      <DatesPanel view={view} />
+      {/* 4. Dates */}
+      <div>
+        <DatesPanel view={view} showGrid />
+        {!frozen && (
+          <div className="px-2">
+            <DateOptionControls slug={slug} adminKey={key} options={view.dates.options.map((o) => ({ id: o.optionId, label: fmtRange(o.start, o.end) }))} />
+          </div>
+        )}
+      </div>
+
+      <IdeasPanel view={view} />
 
       {/* 5. Plans & swipes */}
       <Card>
-        <SectionTitle emoji="🃏" right={status !== "collecting" && <Pill tone="plum">Blend {view.trip.blendRound}/{MAX_BLEND_ROUNDS}</Pill>}>
+        <SectionTitle emoji="🗳️" right={status !== "collecting" && view.trip.blendRound > 0 ? <Pill tone="plum">Blend round</Pill> : undefined}>
           Plans & swipes
         </SectionTitle>
         {status === "collecting" && view.readyToPlan && <AutoPlanner slug={slug} />}
         {status === "collecting" && !view.readyToPlan && (
           <div className="flex flex-col gap-3">
             <p className="text-sm text-ink-soft">
-              Plans generate automatically when the deadline passes{view.trip.expectedSize ? `, or as soon as all ${view.trip.expectedSize} of you have joined and answered` : ""}
-              {view.dates.full.length + view.dates.maybe.length === 0 ? " — as long as there's a 2-day window everyone can make." : "."}
+              Plans are made automatically once everyone&apos;s answered, or when the deadline passes
+              {view.dates.full.length + view.dates.maybe.length === 0 ? " — as long as one date option works for everyone." : "."}
             </p>
             {view.members.length >= 2 && <StartPlanningButton slug={slug} adminKey={key} />}
           </div>
@@ -213,7 +221,7 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
           <div className="mb-4 rounded-2xl border-2 border-maybe/50 bg-maybe-soft p-4">
             <p className="font-display text-lg font-bold">🤝 Closest plan: {view.closest.plan.destination}</p>
             <p className="text-sm text-amber-900">
-              {view.closest.plan.accepts.length}/{view.members.length} said yes after {MAX_BLEND_ROUNDS} blends. No majority rule — here&apos;s who&apos;s still unhappy:
+              {view.closest.plan.accepts.length}/{view.members.length} said yes, even after the blend. No majority rule — here&apos;s who&apos;s still unhappy:
             </p>
             <ul className="mt-2 flex flex-col gap-1 text-sm">
               {view.closest.unhappy.map((u) => (
@@ -222,7 +230,7 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
                 </li>
               ))}
             </ul>
-            <p className="mt-2 text-xs text-amber-900">Talk it through — anyone can still flip their swipe, and it locks the moment all {view.members.length} say yes.</p>
+            <p className="mt-2 text-xs text-amber-900">Talk it through — anyone can still flip their swipe, and it locks the moment everyone says yes.</p>
           </div>
         )}
 
@@ -233,10 +241,9 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
             ))}
           </div>
         )}
-
         {view.earlierPlans.length > 0 && (
           <details className="mt-4">
-            <summary className="cursor-pointer text-sm font-semibold text-ink-soft">Earlier rounds ({view.earlierPlans.length})</summary>
+            <summary className="cursor-pointer text-sm font-semibold text-ink-soft">Earlier plans ({view.earlierPlans.length})</summary>
             <div className="mt-3 flex flex-col gap-3">
               {view.earlierPlans.map((p) => (
                 <SwipeRow key={p.id} plan={p} members={view.members} />
@@ -244,7 +251,6 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
             </div>
           </details>
         )}
-
         {view.rejectedPlans.length > 0 && (
           <details className="mt-4">
             <summary className="cursor-pointer text-sm font-semibold text-ink-soft">Thrown out by the rules ({view.rejectedPlans.length})</summary>
@@ -258,12 +264,12 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
             </ul>
           </details>
         )}
-
-        {status !== "collecting" && status !== "confirmed" && (
+        {status !== "collecting" && !frozen && (
           <div className="mt-4">
             <FreshPlansButton slug={slug} adminKey={key} />
           </div>
         )}
+        <p className="mt-3 text-[11px] text-ink-faint">Rules: everyone must say yes · split vote → {MAX_BLEND_ROUNDS} blended plan · hard passes and budgets are never overridden.</p>
       </Card>
 
       {/* 6. Lock */}
@@ -278,7 +284,7 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
   );
 }
 
-function SwipeRow({ plan, members }: { plan: import("@/lib/view").PlanView; members: { id: string; name: string }[] }) {
+function SwipeRow({ plan, members }: { plan: PlanView; members: { id: string; name: string }[] }) {
   return (
     <div className="rounded-2xl border border-line bg-white p-3">
       <div className="flex items-start justify-between gap-2">

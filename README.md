@@ -48,18 +48,15 @@ Riya's dashboard with **demo controls**:
 
 | Step | Where |
 |---|---|
-| Riya creates trip with just her name (+ optional group size) → one WhatsApp link + private dashboard link | `/new`, `app/api/trips` |
-| Friends open the link and **add themselves** (name + optional WhatsApp number) | `/t/[slug]`, `app/api/t/[slug]/join` |
-| Friend fills calendar (free / not free / maybe + "when will you know?"), vibes, activities, hard no's, private budget, home city | `/t/[slug]`, `/t/[slug]/[memberId]/form` |
+| Riya creates the trip: name, month, deadline and **who's going** (add/remove people any time) → one group link + a private dashboard link | `/new`, `app/api/trips` |
+| Friends open the link and **tap their name** — no forms | `/t/[slug]` |
+| **4 quick steps**, every tap saves: ✅/🤔/❌ on 4+ date options (🤔 asks "when will you know?") → swipe destination idea cards → pick a budget tier (private) → tap hard passes or type your own | `/t/[slug]/[memberId]/start` |
+| Date options = the month's weekends (always ≥ 4); Riya can add/remove options. Plain code finds options that work for everyone, ones that work if the maybes say yes, and the closest ones if none do | `lib/dates.ts` |
 | Nudges at 48h/24h/12h (12h is a personal note from Riya), "update your maybe" on the day, vote & confirm reminders — worked out on each dashboard load | `lib/nudges.ts` |
-| Plans start at the deadline, as soon as the expected group size has joined and answered, or when Riya taps "start planning" | `lib/service.ts` → `readyToPlan()` |
-| Group-chat nudge at 48h/24h/12h for people who haven't joined yet | `lib/nudges.ts` |
-| Missed the deadline (or joined after planning started) → assumed free all days, no vetoes, **average of the others' budgets**; shown to the group | `lib/dates.ts`, `lib/service.ts` |
-| Common 2–4 day windows (plain code); maybe-windows shown separately with who's unsure; best options + who's missing if none | `lib/dates.ts` |
-| Gemini makes 3 plans as JSON; code rejects any that break a veto, a budget, or the dates | `lib/gemini.ts`, `lib/rules.ts` |
-| Swipe cards (touch drag + buttons) | `/t/[slug]/[memberId]/swipe` |
-| All accept → AGREED. Split → Gemini blends the top plans (max 2 rounds). Then Riya sees the closest plan and who's unhappy and why | `lib/service.ts` → `decide()` |
-| Mid-way edits → change feed, recheck plans, regenerate **only** the broken ones | `lib/service.ts` → `saveAnswers()`, `reconcile()` |
+| Deadline passed → anyone missing is counted in for every date, no hard passes, **average of the others' budgets** | `lib/dates.ts`, `lib/service.ts` |
+| Gemini makes the idea cards, then 3 plans from the working dates + most-liked ideas; code rejects any plan that breaks a hard pass, a budget or the dates | `lib/gemini.ts`, `lib/rules.ts` |
+| Swipe on plans. All yes → AGREED. Split → ONE blended plan. Still split → Riya sees the closest plan and who's unhappy and why | `lib/service.ts` → `decide()` |
+| Changes after plans exist (a vote flips, a maybe resolves, a new hard pass, someone added/removed) → change feed + only the broken plans are redone | `lib/service.ts` → `reconcile()` |
 | CONFIRMED: everyone taps "I'm confirmed (leave sorted)" → frozen | `lib/service.ts` → `setConfirmed()` |
 
 ### Privacy & rules
@@ -79,10 +76,10 @@ plans so the app never gets stuck. Override with `GEMINI_MODEL`.
 
 ```
 app/                 pages + API routes
-components/          UI (Calendar, AnswerWizard, SwipeDeck, PlanCard, Panels, DemoPanel…)
+components/          UI (QuickSteps, Swipeable, SwipeDeck, PlanCard, Panels, DemoPanel…)
 lib/gemini.ts        ALL Gemini calls (+ sample-plan fallback)
 lib/sample-plans.ts  offline catalogue used when there's no key
-lib/dates.ts         common-date finder
+lib/dates.ts         date options + poll results
 lib/rules.ts         veto / budget / date checks
 lib/nudges.ts        nudge logic + wa.me links
 lib/service.ts       save answers, change detection, plan generation, deciding, locking

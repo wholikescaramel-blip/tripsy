@@ -3,12 +3,12 @@ import { notFound } from "next/navigation";
 import { AutoPlanner } from "@/components/AutoPlanner";
 import { ConfirmButton } from "@/components/ConfirmButton";
 import { Countdown } from "@/components/Countdown";
-import { ChangeFeed, DatesPanel, LockStatus, WhoIsIn } from "@/components/Panels";
+import { ChangeFeed, DatesPanel, IdeasPanel, LockStatus, WhoIsIn } from "@/components/Panels";
 import { PlanCard } from "@/components/PlanCard";
 import { RefreshOnFocus } from "@/components/RefreshOnFocus";
-import { Card, SectionTitle, Stepper, buttonClass } from "@/components/ui";
+import { Card, SectionTitle, Stepper } from "@/components/ui";
 import { tripPage } from "@/lib/page-data";
-import { fmtDay, fmtMonth } from "@/lib/time";
+import { fmtDay, fmtMonth, fmtRange } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
@@ -18,24 +18,21 @@ export default async function Hub({ params }: PageProps<"/t/[slug]/[memberId]">)
   const me = view.members.find((m) => m.id === memberId);
   if (!me) notFound();
   const status = view.trip.status;
-  const others = (names: string[]) => names.filter((n) => n !== me.name);
+  const frozen = status === "confirmed";
   const toSwipe = view.currentPlans.filter((p) => !p.votes[me.id]);
   const waitingOn = view.members.filter((m) => !m.submitted && !m.assumed && m.id !== me.id).map((m) => m.name);
   const myMaybe = view.openMaybes.find((m) => m.memberId === me.id);
   const members = view.members.map((m) => ({ id: m.id, name: m.name }));
+  const nextStep = me.progress.dates < view.totals.dates ? 1 : me.progress.ideas < view.totals.ideas ? 2 : !me.progress.budget ? 3 : 4;
+  const start = (step: number) => `/t/${slug}/${me.id}/start?step=${step}`;
 
   return (
     <main className="flex flex-col gap-5 pt-6">
       <RefreshOnFocus />
       <header className="flex items-center justify-between">
         <Link href={`/t/${slug}`} className="text-sm font-semibold text-ink-soft">
-          ← Switch person
+          ← Not {me.name}?
         </Link>
-        {status !== "confirmed" && (
-          <Link href={`/t/${slug}/${me.id}/form`} className="rounded-full bg-white px-3 py-1.5 text-sm font-semibold shadow-card">
-            ✏️ {me.submitted ? "Edit my answers" : "My answers"}
-          </Link>
-        )}
       </header>
 
       <div className="animate-rise">
@@ -45,11 +42,11 @@ export default async function Hub({ params }: PageProps<"/t/[slug]/[memberId]">)
       </div>
       <Stepper status={status} />
 
-      {myMaybe?.due && status !== "confirmed" && (
-        <Link href={`/t/${slug}/${me.id}/form`} className="block rounded-3xl border-2 border-maybe bg-maybe-soft p-4 animate-pop">
+      {myMaybe?.due && !frozen && (
+        <Link href={start(1)} className="block rounded-3xl border-2 border-maybe bg-maybe-soft p-4 animate-pop">
           <p className="font-display text-lg font-bold">🤔 Time to update your maybe!</p>
           <p className="text-sm text-amber-900">
-            You said you&apos;d know about {myMaybe.days.map((d) => fmtDay(d)).join(", ")} by {myMaybe.knownBy && fmtDay(myMaybe.knownBy)}. Yes or no?
+            You said you&apos;d know about {myMaybe.ranges.map((r) => fmtRange(r.start, r.end)).join(", ")} by {myMaybe.knownBy && fmtDay(myMaybe.knownBy)}. Yes or no?
           </p>
         </Link>
       )}
@@ -57,19 +54,17 @@ export default async function Hub({ params }: PageProps<"/t/[slug]/[memberId]">)
       {/* The one thing to do right now */}
       {status === "collecting" && view.readyToPlan && <AutoPlanner slug={slug} />}
       {status === "collecting" && !view.readyToPlan && !me.submitted && (
-        <div className="relative overflow-hidden rounded-3xl bg-sunset p-6 text-white shadow-lift">
-          <p className="absolute -top-2 -right-2 text-8xl opacity-25">🗓️</p>
-          <p className="font-display text-2xl font-extrabold">Your turn! 2 minutes, tops.</p>
-          <p className="mt-1 text-white/85">Mark your free days, what you&apos;d love to do and your hard no&apos;s.</p>
+        <Link href={start(nextStep)} className="relative block overflow-hidden rounded-3xl bg-sunset p-6 text-white shadow-lift transition active:scale-[0.98]">
+          <p className="absolute -top-2 -right-2 text-8xl opacity-25">👆</p>
+          <p className="font-display text-2xl font-extrabold">{nextStep === 1 ? "4 quick taps, 1 minute" : "Pick up where you left off"}</p>
+          <p className="mt-1 text-white/85">📅 dates · 🃏 swipe ideas · 💸 budget · 🙅 hard passes</p>
           {!view.deadlinePassed && (
             <p className="mt-3 text-sm font-semibold">
               ⏳ Closes in <Countdown target={view.trip.deadline} nowIso={view.now} />
             </p>
           )}
-          <Link href={`/t/${slug}/${me.id}/form`} className="mt-4 inline-flex w-full items-center justify-center rounded-2xl bg-white px-5 py-3.5 font-bold text-ink transition active:scale-95">
-            Let&apos;s do it →
-          </Link>
-        </div>
+          <span className="mt-4 flex w-full items-center justify-center rounded-2xl bg-white px-5 py-3.5 font-bold text-ink">Let&apos;s go →</span>
+        </Link>
       )}
       {status === "collecting" && !view.readyToPlan && me.submitted && (
         <Card tone="ink">
@@ -78,11 +73,9 @@ export default async function Hub({ params }: PageProps<"/t/[slug]/[memberId]">)
           <p className="mt-1 text-sm text-white/70">
             {waitingOn.length
               ? `Waiting on ${waitingOn.join(", ")}. The app nudges them — you don't have to.`
-              : view.members.length < 2
-                ? "It's just you so far — share the link in the group chat so friends can add themselves."
-                : view.dates.full.length + view.dates.maybe.length === 0
-                  ? "Everyone who's joined has answered, but there's no 2-day window that works for all of you yet. Check the closest dates below."
-                  : "Everyone who's joined has answered. Plans get made at the deadline, or sooner if the coordinator starts them."}
+              : view.dates.full.length + view.dates.maybe.length === 0
+                ? "Everyone's answered, but no date works for everyone yet. Riya can add another date option."
+                : "Plans are on their way."}
           </p>
           {!view.deadlinePassed && waitingOn.length > 0 && (
             <p className="mt-3 text-sm">
@@ -95,17 +88,15 @@ export default async function Hub({ params }: PageProps<"/t/[slug]/[memberId]">)
       {(status === "voting" || status === "stuck") && toSwipe.length > 0 && (
         <Link href={`/t/${slug}/${me.id}/swipe`} className="block rounded-3xl bg-sunset p-6 text-white shadow-lift transition active:scale-[0.98]">
           <p className="text-4xl">🃏</p>
-          <p className="mt-2 font-display text-2xl font-extrabold">
-            {view.trip.blendRound > 0 ? "A blended plan is ready!" : `${toSwipe.length} plan${toSwipe.length > 1 ? "s" : ""} to swipe`}
-          </p>
-          <p className="mt-1 text-white/85">{view.trip.blendRound > 0 ? "It mixes the most-liked bits of each side. Swipe on it →" : "Right if you'd go, left if not. Takes a minute →"}</p>
+          <p className="mt-2 font-display text-2xl font-extrabold">{view.trip.blendRound > 0 ? "A blended plan is ready!" : `${toSwipe.length} plan${toSwipe.length > 1 ? "s" : ""} to swipe`}</p>
+          <p className="mt-1 text-white/85">{view.trip.blendRound > 0 ? "It mixes the most-liked bits of each side. Swipe on it →" : "Right if you'd go, left if not →"}</p>
         </Link>
       )}
       {status === "voting" && toSwipe.length === 0 && view.currentPlans.length > 0 && (
         <Card>
           <SectionTitle emoji="🗳️">You&apos;ve voted</SectionTitle>
           <p className="text-sm text-ink-soft">
-            Waiting on {others([...new Set(view.currentPlans.flatMap((p) => p.pending))]).join(", ") || "the final count"}. No majority rule — if the group splits, we blend.
+            Waiting on {[...new Set(view.currentPlans.flatMap((p) => p.pending))].filter((n) => n !== me.name).join(", ") || "the final count"}. No majority rule — if the group splits, we blend.
           </p>
           <Link href={`/t/${slug}/${me.id}/swipe`} className="mt-3 inline-block text-sm font-semibold text-coral-dark">
             Review my swipes →
@@ -120,9 +111,7 @@ export default async function Hub({ params }: PageProps<"/t/[slug]/[memberId]">)
       {status === "stuck" && toSwipe.length === 0 && (
         <Card>
           <SectionTitle emoji="🤝">Nearly there</SectionTitle>
-          <p className="text-sm text-ink-soft">
-            Two blends and still not everyone&apos;s a yes. Riya can see the closest plan and what&apos;s holding people back. You can still flip a swipe if you&apos;ve changed your mind.
-          </p>
+          <p className="text-sm text-ink-soft">No plan got a yes from everyone, even after the blend. Riya can see the closest one and what&apos;s holding people back. You can still flip a swipe.</p>
           <Link href={`/t/${slug}/${me.id}/swipe`} className="mt-3 inline-block text-sm font-semibold text-coral-dark">
             Review my swipes →
           </Link>
@@ -132,9 +121,9 @@ export default async function Hub({ params }: PageProps<"/t/[slug]/[memberId]">)
       {(status === "agreed" || status === "confirmed") && view.agreedPlan && (
         <section className="flex flex-col gap-4">
           <div className="text-center">
-            <p className="text-5xl animate-float">{status === "confirmed" ? "🔒" : "🎉"}</p>
-            <h2 className="mt-2 font-display text-2xl font-extrabold">{status === "confirmed" ? "It's official. Go book it!" : "Everyone said yes!"}</h2>
-            <p className="text-sm text-ink-soft">{status === "confirmed" ? "Everyone's leave is sorted. The plan is frozen." : "Last step: tap below once your leave is sorted."}</p>
+            <p className="text-5xl animate-float">{frozen ? "🔒" : "🎉"}</p>
+            <h2 className="mt-2 font-display text-2xl font-extrabold">{frozen ? "It's official. Go book it!" : "Everyone said yes!"}</h2>
+            <p className="text-sm text-ink-soft">{frozen ? "Everyone's leave is sorted. The plan is frozen." : "Last step: tap below once your leave is sorted."}</p>
           </div>
           <PlanCard plan={view.agreedPlan} members={members} meId={me.id} />
           <Card>
@@ -143,28 +132,40 @@ export default async function Hub({ params }: PageProps<"/t/[slug]/[memberId]">)
             {status === "agreed" && (
               <div className="mt-4">
                 <ConfirmButton slug={slug} memberId={me.id} confirmed={me.confirmed} />
-                <p className="mt-2 text-center text-xs text-ink-faint">You can still edit answers — changes show up to the group with a timestamp.</p>
+                <p className="mt-2 text-center text-xs text-ink-faint">You can still change answers — the group sees each change with a timestamp.</p>
               </div>
             )}
           </Card>
         </section>
       )}
 
+      {me.submitted && !frozen && (
+        <Card>
+          <SectionTitle emoji="✏️">Change your answers</SectionTitle>
+          <div className="grid grid-cols-2 gap-2 text-sm font-semibold">
+            <Link href={start(1)} className="rounded-2xl bg-sand px-3 py-3 text-center">
+              📅 Dates
+            </Link>
+            <Link href={start(2)} className="rounded-2xl bg-sand px-3 py-3 text-center">
+              🃏 Ideas
+            </Link>
+            <Link href={start(3)} className="rounded-2xl bg-sand px-3 py-3 text-center">
+              💸 Budget
+            </Link>
+            <Link href={start(4)} className="rounded-2xl bg-sand px-3 py-3 text-center">
+              🙅 Hard passes
+            </Link>
+          </div>
+        </Card>
+      )}
+
       <DatesPanel view={view} />
+      {me.submitted && <IdeasPanel view={view} />}
       <Card>
         <SectionTitle emoji="👯">The crew</SectionTitle>
         <WhoIsIn view={view} meId={me.id} />
       </Card>
       <ChangeFeed view={view} />
-      {me.isCoordinator && (
-        <p className="text-center text-sm text-ink-soft">
-          You&apos;re the coordinator — your dashboard link is the one with <code>?key=</code>.
-        </p>
-      )}
-      <div className="h-4" />
-      <Link href={`/t/${slug}/${me.id}/form`} className={`${buttonClass("ghost")} ${status === "confirmed" ? "hidden" : ""}`}>
-        ✏️ Change my dates or wishes
-      </Link>
     </main>
   );
 }

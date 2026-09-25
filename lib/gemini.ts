@@ -2,10 +2,10 @@
 // realistic sample plans so the whole app works offline.
 
 import "server-only";
-import { ACTIVITY_BY_KEY, VETOES, VETO_BY_KEY, VIBE_BY_KEY } from "./options";
+import { VETOES, VETO_BY_KEY } from "./options";
 import type { PlanContext, VoteSummary } from "./plan-context";
-import type { PlanDraft } from "./types";
-import { sampleBlend, samplePlans } from "./sample-plans";
+import type { IdeaDraft, PlanDraft } from "./types";
+import { sampleBlend, sampleIdeas, samplePlans } from "./sample-plans";
 import { fmtMonth } from "./time";
 
 const API = "https://generativelanguage.googleapis.com/v1beta/models";
@@ -56,29 +56,29 @@ const PLAN_SCHEMA = {
 
 const SYSTEM = `You plan short group trips in India for a group of friends who live in different cities.
 Hard rules (a plan that breaks any of them is thrown away by code, so don't waste it):
-- Dates: a 2–4 day trip fully inside one of the given date windows. Prefer "everyone_free" windows.
+- Dates: start_date and end_date must be EXACTLY one of the given date_options (same start, same end). Prefer "everyone_free" ones.
 - Hard no's are absolute. Never include anything on anyone's hard-no list — not the destination, travel mode, stay, or any activity. Don't mention vetoed things at all, not even to say they're avoided.
 - Keep cost_per_person (rough INR, including travel from their home cities) at or under the per-person ceiling if one is given. Never mention budgets, money limits or anyone's finances in fit_notes.
 - "tags" must list every hard-no key from the reference list that the plan touches, honestly.
-- fit_notes: exactly one short, warm line per person (use their name as given) on how the plan fits what THEY asked for.
+- fit_notes: exactly one short, warm line per person (use their name as given) on how the plan fits what THEY liked. Build plans around the destination ideas the group swiped right on most.
 - Rough estimates only; no live prices, bookings, or links.`;
 
 function describe(ctx: PlanContext): string {
   const people = ctx.people.map((p) => ({
     name: p.name,
     home_city: p.homeCity || "unknown",
-    trip_vibes: p.vibes.map((k) => VIBE_BY_KEY[k]?.label ?? k),
-    wants_to_do: p.activities.map((k) => ACTIVITY_BY_KEY[k]?.label ?? k),
+    liked_ideas: p.likedIdeas,
+    passed_on_ideas: p.passedIdeas,
     hard_no: p.vetoes.map((k) => `${k} (${VETO_BY_KEY[k]?.label ?? k})`),
     other_hard_no: p.vetoNotes || undefined,
-    wishes: p.wishes || undefined,
-    note: p.assumed ? "Missed the deadline: assume free every day, no hard no's, easy-going." : undefined,
+    note: p.assumed ? "Hasn't answered: assume free on every date option, no hard no's, easy-going." : undefined,
   }));
   return JSON.stringify(
     {
       trip: ctx.tripName,
       month: fmtMonth(ctx.month),
-      date_windows: ctx.windows,
+      date_options: ctx.windows,
+      idea_likes: ctx.ideaLikes,
       per_person_cost_ceiling_inr: ctx.budgetCeiling,
       people,
       hard_no_reference: VETOES.map((v) => `${v.key}: ${v.label}`),
@@ -131,6 +131,48 @@ function normalise(raw: RawPlan): PlanDraft {
     fit_notes: Object.fromEntries((raw.fit_notes ?? []).map((f) => [f.name, f.line])),
     tags: (raw.tags ?? []).filter((t) => VETO_BY_KEY[t]),
   };
+}
+
+const IDEA_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    ideas: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          destination: { type: "STRING" },
+          region: { type: "STRING" },
+          pitch: { type: "STRING", description: "One short, fun line (max 10 words)." },
+          highlights: { type: "ARRAY", items: { type: "STRING" }, description: "3 short things to do there." },
+          emoji: { type: "STRING", description: "One emoji." },
+          cost_estimate: { type: "INTEGER", description: "Rough INR per person for 3 days incl. travel." },
+          tags: { type: "ARRAY", items: { type: "STRING", enum: VETOES.map((v) => v.key) }, description: "Every hard-no key this trip involves." },
+        },
+        required: ["destination", "region", "pitch", "highlights", "emoji", "cost_estimate", "tags"],
+      },
+    },
+  },
+  required: ["ideas"],
+};
+
+/** Destination idea cards people swipe on first (so nobody fills in a "what do you like" form). */
+export async function generateIdeas(month: string, count = 8): Promise<{ ideas: IdeaDraft[]; source: PlanSource }> {
+  if (!geminiConfigured()) return { ideas: sampleIdeas(count), source: "sample" };
+  const prompt = `Suggest ${count} very different 2–4 day group trip ideas in India that are good in ${fmtMonth(month)} (think about the weather that month).
+Mix styles: beach, hills, heritage, backwaters/nature, adventure, city/food, wildlife, a chill villa weekend. Keep it realistic for friends travelling from different Indian cities.`;
+  try {
+    const out = (await callGemini(prompt, IDEA_SCHEMA)) as { ideas: IdeaDraft[] };
+    const ideas = out.ideas.slice(0, count).map((i) => ({
+      ...i,
+      cost_estimate: Math.round(Number(i.cost_estimate) || 0),
+      highlights: (i.highlights ?? []).slice(0, 3).map(String),
+      tags: (i.tags ?? []).filter((t) => VETO_BY_KEY[t]),
+    }));
+    return ideas.length >= 4 ? { ideas, source: "gemini" } : { ideas: sampleIdeas(count), source: "sample" };
+  } catch {
+    return { ideas: sampleIdeas(count), source: "sample" };
+  }
 }
 
 /**

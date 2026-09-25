@@ -6,10 +6,10 @@ import { hasSupabase, isHosted } from "@/lib/config";
 export const dynamic = "force-dynamic";
 
 const STEPS = [
-  { emoji: "🔗", title: "One link in the group chat", text: "Riya sets the month and a deadline. Everyone gets the same WhatsApp link." },
-  { emoji: "🗓️", title: "Everyone taps in their days", text: "Free, not free or maybe — plus what they'd love, their hard no's and a private budget." },
-  { emoji: "🤖", title: "The app does the chasing", text: "Timed WhatsApp nudges, auto-found common dates and 3 plans that respect every veto." },
-  { emoji: "🃏", title: "Swipe, blend, lock", text: "Everyone swipes. Split? We blend the favourite bits. Then everyone confirms their leave." },
+  { emoji: "🔗", title: "Riya lists who's going", text: "Trip name, month, a deadline and names. One link goes in the group chat." },
+  { emoji: "👆", title: "Everyone taps their name", text: "Then a minute of taps: ✅ / 🤔 / ❌ on a few dates, swipe some trip ideas, pick a budget, tap any hard passes." },
+  { emoji: "🤖", title: "The app does the chasing", text: "WhatsApp nudges before the deadline, dates everyone can do, and plans that respect every hard pass." },
+  { emoji: "🃏", title: "Swipe, blend, lock", text: "Everyone swipes the plans. Split? One blended plan. Then everyone confirms their leave." },
 ];
 
 const POSTCARDS = [

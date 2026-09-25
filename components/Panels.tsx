@@ -1,121 +1,86 @@
 import type { TripView } from "@/lib/view";
-import { fmtDateTime, fmtDay, fmtRange, relative, weekday } from "@/lib/time";
+import { fmtDateTime, fmtDay, fmtRange, relative } from "@/lib/time";
 import { Avatar, Card, Empty, Pill, SectionTitle } from "./ui";
 
-/** Month heat-strip: how many people are free each day. */
-export function GroupHeatmap({ view }: { view: TripView }) {
-  const { days, grid } = view.dates;
+const VOTE_ICON = { yes: "✅", assumed: "✅", maybe: "🤔", no: "❌", pending: "…" } as const;
+
+/** Date poll results: which options work for everyone, which depend on a maybe. */
+export function DatesPanel({ view, showGrid = false }: { view: TripView; showGrid?: boolean }) {
+  const { options, assumed } = view.dates;
   const n = view.members.length;
-  const lead = (weekday(days[0]) + 6) % 7;
   return (
-    <div>
-      <div className="mb-1 grid grid-cols-7 text-center text-[10px] font-bold text-ink-faint">
-        {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
-          <span key={i}>{d}</span>
-        ))}
-      </div>
-      <div className="grid grid-cols-7 gap-1">
-        {Array.from({ length: lead }, (_, i) => (
-          <span key={i} />
-        ))}
-        {days.map((d) => {
-          const statuses = view.members.map((m) => grid[m.id][d]);
-          const free = statuses.filter((s) => s === "free").length;
-          const maybe = statuses.filter((s) => s === "maybe").length;
-          const everyone = free === n;
-          const withMaybe = free + maybe === n && maybe > 0;
-          const alpha = (free + maybe * 0.5) / n;
+    <Card>
+      <SectionTitle emoji="📅">Dates</SectionTitle>
+      {assumed.length > 0 && (
+        <div className="mb-3 rounded-2xl border border-maybe/40 bg-maybe-soft p-3 text-sm text-amber-900">
+          <b>⏰ Not answered:</b> {assumed.map((m) => m.name).join(", ")}. We&apos;re counting them in for every date, with no hard passes and an average budget, so the trip can move on.
+        </div>
+      )}
+      <ul className="flex flex-col gap-2">
+        {options.map((o) => {
+          const tone = o.works === "everyone" ? "bg-free-soft" : o.works === "maybe" ? "bg-maybe-soft" : "bg-sand";
           return (
-            <div
-              key={d}
-              title={`${fmtDay(d)}: ${free} free${maybe ? `, ${maybe} maybe` : ""}`}
-              className={`relative flex aspect-square flex-col items-center justify-center rounded-lg text-[11px] font-bold ${everyone ? "text-white ring-2 ring-free ring-offset-1" : withMaybe ? "text-white ring-2 ring-maybe ring-offset-1" : "text-ink"}`}
-              style={{ background: everyone ? "#10b981" : withMaybe ? "#f59e0b" : `rgb(16 185 129 / ${0.08 + alpha * 0.45})` }}
-            >
-              {Number(d.slice(8))}
-              <span className="text-[8px] font-semibold opacity-80">
-                {free}/{n}
-              </span>
-            </div>
+            <li key={o.optionId} className={`rounded-2xl px-4 py-3 ${tone}`}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-display font-bold">{fmtRange(o.start, o.end)}</span>
+                <span className="text-xs font-bold">
+                  {o.works === "everyone" ? "✅ everyone's in" : o.works === "maybe" ? "🤔 if the maybes say yes" : `${o.yes.length}/${n} can go`}
+                </span>
+              </div>
+              {o.maybe.length > 0 && (
+                <p className="mt-1 text-xs text-amber-900">
+                  Unsure: {o.maybe.map((m) => `${m.name}${m.knownBy ? ` (knows by ${fmtDay(m.knownBy)})` : ""}`).join(", ")}
+                </p>
+              )}
+              {o.works === "no" && (o.no.length > 0 || o.pending.length > 0) && (
+                <p className="mt-1 text-xs text-ink-soft">
+                  {o.no.length > 0 && <>Can&apos;t: {o.no.join(", ")}. </>}
+                  {o.pending.length > 0 && <>Waiting on: {o.pending.join(", ")}.</>}
+                </p>
+              )}
+              {showGrid && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {view.members.map((m, i) => (
+                    <span key={m.id} className="flex items-center gap-1 rounded-full bg-white/80 py-0.5 pr-2 pl-0.5 text-[11px] font-semibold">
+                      <Avatar name={m.name} index={i} size={18} />
+                      {VOTE_ICON[o.votes[m.id] ?? "pending"]}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </li>
           );
         })}
-      </div>
-      <div className="mt-2 flex flex-wrap gap-3 text-[11px] font-semibold text-ink-soft">
-        <span className="flex items-center gap-1">
-          <i className="h-3 w-3 rounded bg-free" /> all free
-        </span>
-        <span className="flex items-center gap-1">
-          <i className="h-3 w-3 rounded bg-maybe" /> all free if maybes say yes
-        </span>
-        <span className="flex items-center gap-1">
-          <i className="h-3 w-3 rounded bg-free/30" /> some free
-        </span>
-      </div>
-    </div>
+      </ul>
+      {view.dates.full.length === 0 && view.dates.maybe.length === 0 && view.members.every((m) => m.submitted || m.assumed) && (
+        <p className="mt-3 text-sm font-semibold text-ink-soft">No date works for everyone yet. Riya can add another date option.</p>
+      )}
+    </Card>
   );
 }
 
-export function DatesPanel({ view }: { view: TripView }) {
-  const { full, maybe, best, waitingOn, assumed } = view.dates;
+/** Most-liked destination ideas. */
+export function IdeasPanel({ view }: { view: TripView }) {
+  const ranked = [...view.ideas].sort((a, b) => b.likedBy.length - a.likedBy.length);
   return (
     <Card>
-      <SectionTitle emoji="📅" right={<Pill tone="neutral">2–4 day windows</Pill>}>
-        Common dates
-      </SectionTitle>
-      {assumed.length > 0 && (
-        <div className="mb-3 rounded-2xl border border-maybe/40 bg-maybe-soft p-3 text-sm text-amber-900">
-          <b>⏰ Not answered yet:</b> {assumed.map((m) => m.name).join(", ")}. Until they do, we&apos;re treating them as free every day, with no
-          hard no&apos;s and an average budget, so the trip can move on.
-        </div>
-      )}
-      {waitingOn.length > 0 && (
-        <p className="mb-3 text-sm text-ink-soft">
-          Still waiting on <b>{waitingOn.map((m) => m.name).join(", ")}</b> — dates firm up once everyone&apos;s in.
-        </p>
-      )}
-      <GroupHeatmap view={view} />
-      <div className="mt-4 flex flex-col gap-2">
-        {full.map((w) => (
-          <div key={w.start} className="flex items-center justify-between rounded-2xl bg-free-soft px-4 py-3">
-            <span className="font-display font-bold text-emerald-900">{fmtRange(w.start, w.end)}</span>
-            <span className="text-xs font-semibold text-emerald-800">{w.length > 4 ? `${w.length} days · pick any 2–4` : `${w.length} days`} · everyone ✓</span>
-          </div>
-        ))}
-        {maybe.map((w) => (
-          <div key={`m-${w.start}`} className="rounded-2xl bg-maybe-soft px-4 py-3">
-            <div className="flex items-center justify-between">
-              <span className="font-display font-bold text-amber-900">{fmtRange(w.start, w.end)}</span>
-              <span className="text-xs font-semibold text-amber-800">works if maybes say yes</span>
-            </div>
-            <ul className="mt-1 text-xs text-amber-900">
-              {w.unsure.map((u) => (
-                <li key={u.memberId}>
-                  🤔 {u.name} unsure on {u.days.map((d) => fmtDay(d)).join(", ")}
-                  {u.knownBy ? ` — knows by ${fmtDay(u.knownBy)}` : ""}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-        {!full.length && !maybe.length && best.length > 0 && (
-          <>
-            <p className="text-sm font-semibold text-ink-soft">No window works for everyone yet. Closest options:</p>
-            {best.map((w) => (
-              <div key={`b-${w.start}`} className="rounded-2xl border border-line bg-white px-4 py-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-display font-bold">{fmtRange(w.start, w.end)}</span>
-                  <span className="text-xs font-semibold text-ink-soft">
-                    {w.available}/{view.members.length} can make it
-                  </span>
-                </div>
-                <p className="mt-1 text-xs text-ink-soft">
-                  Missing: {w.missing.map((m) => `${m.name}${m.why === "unknown" ? " (hasn't answered)" : ""}`).join(", ")}
-                </p>
+      <SectionTitle emoji="🃏">Most-liked ideas</SectionTitle>
+      <ul className="flex flex-col gap-2">
+        {ranked.map((i) => (
+          <li key={i.id} className="flex items-center gap-3">
+            <span className="text-xl">{i.emoji}</span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold">{i.destination}</p>
+              <div className="mt-1 h-2 overflow-hidden rounded-full bg-sand">
+                <div className="h-full rounded-full bg-sunset" style={{ width: `${(i.likedBy.length / Math.max(view.members.length, 1)) * 100}%` }} />
               </div>
-            ))}
-          </>
-        )}
-      </div>
+            </div>
+            <span className="w-10 text-right text-xs font-bold">
+              {i.likedBy.length}/{view.members.length}
+            </span>
+          </li>
+        ))}
+      </ul>
     </Card>
   );
 }
@@ -146,20 +111,34 @@ export function ChangeFeed({ view, limit = 12 }: { view: TripView; limit?: numbe
   );
 }
 
+export function StepChips({ m, totals }: { m: TripView["members"][number]; totals: TripView["totals"] }) {
+  const chip = (done: boolean, label: string) => (
+    <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${done ? "bg-free-soft text-emerald-800" : "bg-sand text-ink-faint"}`}>{label}</span>
+  );
+  return (
+    <span className="flex flex-wrap gap-1">
+      {chip(m.progress.dates >= totals.dates, `📅 ${m.progress.dates}/${totals.dates}`)}
+      {chip(m.progress.ideas >= totals.ideas, `🃏 ${m.progress.ideas}/${totals.ideas}`)}
+      {chip(m.progress.budget, "💸")}
+      {chip(m.progress.passes, "🙅")}
+    </span>
+  );
+}
+
 export function WhoIsIn({ view, meId }: { view: TripView; meId?: string }) {
   return (
     <div className="flex flex-col gap-2">
       {view.members.map((m, i) => (
         <div key={m.id} className="flex items-center gap-3 rounded-2xl bg-white/70 px-3 py-2">
           <Avatar name={m.name} index={i} size={34} dim={!m.submitted && !m.assumed} />
-          <div className="flex-1">
+          <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold">
               {m.id === meId ? `${m.name} (you)` : m.name}
               {m.isCoordinator && <span className="ml-1.5 text-[11px] text-coral-dark">coordinator</span>}
             </p>
-            <p className="text-xs text-ink-soft">{m.homeCity ? `from ${m.homeCity}` : m.submitted ? "" : "hasn't answered yet"}</p>
+            {!m.submitted && <StepChips m={m} totals={view.totals} />}
           </div>
-          {m.submitted ? <Pill tone="free">✓ in</Pill> : m.assumed ? <Pill tone="maybe">assumed free</Pill> : <Pill tone="neutral">waiting</Pill>}
+          {m.submitted ? <Pill tone="free">✓ in</Pill> : m.assumed ? <Pill tone="maybe">counted in</Pill> : <Pill tone="neutral">not yet</Pill>}
         </div>
       ))}
     </div>

@@ -1,14 +1,14 @@
-// Hard rules every plan must pass. Vetoes are absolute: no score, vote or blend overrides them.
+// Hard rules every plan must pass. Hard passes are absolute: no vote or blend overrides them.
 
-import { VETOES, VETO_BY_KEY } from "./options";
-import { blockersFor, fitsInWindows, type DatesResult } from "./dates";
+import { VETO_BY_KEY } from "./options";
+import { optionFor, type DatesResult } from "./dates";
 import type { Member, PlanDraft, Preferences } from "./types";
-import { fmtDay } from "./time";
+import { fmtRange } from "./time";
 
 export interface RuleResult {
   ok: boolean;
   problems: string[];
-  /** Plan dates rely on someone's "maybe" days. Allowed, but shown on the card. */
+  /** Plan dates rely on someone's "maybe". Allowed, but shown on the card. */
   dependsOnMaybe: string[];
 }
 
@@ -24,7 +24,7 @@ function mentions(text: string, phrase: string): boolean {
 export function vetoPhrases(notes: string): string[] {
   return notes
     .split(/[,;\n]| and /i)
-    .map((p) => p.trim().replace(/^(no|not|never|avoid|don't want|dont want|nothing with)\s+/i, "").trim())
+    .map((p) => p.trim().replace(/^(no|not|never|avoid|don't want|dont want|nothing with|hate)\s+/i, "").trim())
     .filter((p) => p.length >= 3);
 }
 
@@ -36,8 +36,8 @@ export function planText(plan: PlanDraft) {
   };
 }
 
-/** Which of this member's vetoes does the plan break? Pure keyword + tag check. */
-export function vetoHits(plan: PlanDraft, prefs: Preferences | undefined): string[] {
+/** Which of this person's hard passes does the plan break? Tag + keyword check. */
+export function vetoHits(plan: PlanDraft, prefs: Pick<Preferences, "vetoes" | "veto_notes"> | undefined): string[] {
   if (!prefs) return [];
   const text = planText(plan);
   const hits: string[] = [];
@@ -64,35 +64,23 @@ export function checkPlan(
   const problems: string[] = [];
   const dependsOnMaybe: string[] = [];
 
-  // 1. Vetoes. People who never submitted have no vetoes on record.
+  // 1. Hard passes. People who never answered have none on record.
   for (const m of members) {
-    const hits = vetoHits(plan, prefs.find((p) => p.member_id === m.id && m.submitted_at));
-    if (hits.length) problems.push(`Breaks ${m.name}'s hard no: ${hits.join(", ")}`);
+    const hits = vetoHits(plan, prefs.find((p) => p.member_id === m.id));
+    if (hits.length) problems.push(`Breaks ${m.name}'s hard pass: ${hits.join(", ")}`);
   }
 
   // 2. Budget. Only a yes/no per person ever leaves the database.
   const over = members.filter((m) => budgetFits[m.id] === false);
   if (over.length) problems.push(`Over budget for ${over.map((m) => m.name).join(", ")}`);
 
-  // 3. Dates must sit inside a window everyone can make (or can make if their "maybe" turns into a yes).
-  if (!fitsInWindows(plan.start_date, plan.end_date, dates.full)) {
-    const inMaybe = fitsInWindows(plan.start_date, plan.end_date, dates.maybe);
-    if (inMaybe) {
-      for (const u of inMaybe.unsure) {
-        if (u.days.some((d) => d >= plan.start_date && d <= plan.end_date)) dependsOnMaybe.push(u.name);
-      }
-    } else {
-      const blockers = blockersFor(plan.start_date, plan.end_date, members, dates.grid);
-      const names = [...new Set(blockers.map((b) => b.name))];
-      problems.push(
-        names.length
-          ? `Dates no longer work for ${names.join(", ")} (${fmtDay(blockers[0].day)})`
-          : "Dates must be a 2–4 day window inside the target month",
-      );
-    }
-  }
+  // 3. Dates must be one of the voted options that works for everyone (or will, if the maybes say yes).
+  const option = optionFor(plan.start_date, plan.end_date, dates.options);
+  if (!option) problems.push("Dates aren't one of the date options");
+  else if (option.works === "no") {
+    const who = [...option.no, ...option.pending];
+    problems.push(`${fmtRange(option.start, option.end)} no longer works for ${who.join(", ")}`);
+  } else if (option.works === "maybe") dependsOnMaybe.push(...option.maybe.map((m) => m.name));
 
   return { ok: problems.length === 0, problems, dependsOnMaybe };
 }
-
-export const VETO_KEYS = VETOES.map((v) => v.key);

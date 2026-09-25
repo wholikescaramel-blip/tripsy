@@ -1,201 +1,91 @@
-// Common-date finder. Plain code, no Gemini.
-//
-// Every member gets an effective status for every day of the target month:
-//   free | maybe | busy | unknown (hasn't submitted and the deadline hasn't passed yet)
-// After the deadline, anyone who never submitted is treated as free on all days.
-// Days left blank by someone who did submit count as "not free".
+// Date poll: the app suggests date options, everyone taps yes / no / maybe. Plain code, no Gemini.
 
-import type { AvailabilityRow, DayStatus, Member } from "./types";
-import { addDays, daysBetween, monthDays } from "./time";
+import type { DateOption, DateVote, DateVoteValue, Member } from "./types";
+import { addDays, daysBetween, monthDays, weekday } from "./time";
 
-export type EffectiveStatus = DayStatus | "unknown";
+export const MIN_OPTIONS = 4;
 
-export const MIN_WINDOW = 2;
-export const MAX_WINDOW = 4;
-
-export interface UnsureMember {
-  memberId: string;
-  name: string;
-  days: string[];
-  knownBy: string | null;
+/** Every Fri–Sun weekend in the month; topped up with Sat–Mon spans so there are always ≥ 4 options. */
+export function suggestDateOptions(monthStart: string): { start_date: string; end_date: string }[] {
+  const days = monthDays(monthStart);
+  const last = days[days.length - 1];
+  const out: { start_date: string; end_date: string }[] = [];
+  for (const d of days) {
+    if (weekday(d) === 5 && addDays(d, 2) <= last) out.push({ start_date: d, end_date: addDays(d, 2) });
+  }
+  for (const d of days) {
+    if (out.length >= MIN_OPTIONS) break;
+    if (weekday(d) === 6 && addDays(d, 2) <= last) out.push({ start_date: d, end_date: addDays(d, 2) });
+  }
+  return out.sort((a, b) => a.start_date.localeCompare(b.start_date));
 }
 
-export interface DateWindow {
+export type VoteState = DateVoteValue | "pending" | "assumed";
+
+export interface OptionResult {
+  optionId: string;
   start: string;
   end: string;
-  length: number; // days in the run (may be > 4: "pick any 2–4 days inside")
-  unsure: UnsureMember[]; // only for maybe windows
-  missing: { memberId: string; name: string; why: "busy" | "unknown" }[]; // only for best-effort windows
-  available: number;
+  length: number;
+  addedBy: DateOption["added_by"];
+  votes: Record<string, VoteState>; // memberId -> vote
+  yes: string[];
+  maybe: { name: string; knownBy: string | null }[];
+  no: string[];
+  pending: string[];
+  /** everyone | if-maybes-say-yes | no */
+  works: "everyone" | "maybe" | "no";
 }
 
 export interface DatesResult {
-  days: string[];
-  grid: Record<string, Record<string, EffectiveStatus>>; // memberId -> day -> status
-  full: DateWindow[]; // everyone free every day
-  maybe: DateWindow[]; // works if the unsure people say yes
-  best: DateWindow[]; // only when there are no full windows: closest options + who's missing
-  waitingOn: Member[]; // not submitted yet, deadline not passed
-  assumed: Member[]; // missed the deadline -> assumed free, no vetoes, average budget
+  options: OptionResult[];
+  full: OptionResult[]; // everyone can go
+  maybe: OptionResult[]; // works if the unsure people say yes
+  best: OptionResult[]; // when nothing works for everyone: closest options
+  assumed: Member[]; // missed the deadline → counted as yes to every option
 }
 
-export function effectiveGrid(
-  members: Member[],
-  availability: AvailabilityRow[],
-  days: string[],
-  deadlinePassed: boolean,
-): Record<string, Record<string, EffectiveStatus>> {
-  const grid: Record<string, Record<string, EffectiveStatus>> = {};
-  const byMember = new Map<string, Map<string, AvailabilityRow>>();
-  for (const row of availability) {
-    if (!byMember.has(row.member_id)) byMember.set(row.member_id, new Map());
-    byMember.get(row.member_id)!.set(row.day, row);
-  }
-  for (const m of members) {
-    const rows = byMember.get(m.id);
-    grid[m.id] = {};
-    for (const day of days) {
-      if (!m.submitted_at) grid[m.id][day] = deadlinePassed ? "free" : "unknown";
-      else grid[m.id][day] = rows?.get(day)?.status ?? "busy";
-    }
-  }
-  return grid;
-}
-
-export function findCommonDates(
-  members: Member[],
-  availability: AvailabilityRow[],
-  monthStart: string,
-  deadlinePassed: boolean,
-): DatesResult {
-  const days = monthDays(monthStart);
-  const grid = effectiveGrid(members, availability, days, deadlinePassed);
-  const knownBy = new Map<string, string | null>();
-  for (const row of availability) {
-    if (row.status === "maybe") knownBy.set(`${row.member_id}|${row.day}`, row.maybe_known_by);
-  }
-
-  // Day-level verdict across the whole group.
-  const dayState = (day: string): "free" | "maybe" | "no" => {
-    let sawMaybe = false;
+export function dateResults(members: Member[], options: DateOption[], votes: DateVote[], assumeMissing: boolean): DatesResult {
+  const results: OptionResult[] = options.map((o) => {
+    const r: OptionResult = {
+      optionId: o.id,
+      start: o.start_date,
+      end: o.end_date,
+      length: daysBetween(o.start_date, o.end_date) + 1,
+      addedBy: o.added_by,
+      votes: {},
+      yes: [],
+      maybe: [],
+      no: [],
+      pending: [],
+      works: "no",
+    };
     for (const m of members) {
-      const s = grid[m.id][day];
-      if (s === "busy" || s === "unknown") return "no";
-      if (s === "maybe") sawMaybe = true;
+      const v = votes.find((x) => x.option_id === o.id && x.member_id === m.id);
+      // No vote yet: once we assume (deadline passed / planning started), count it as a yes.
+      const state: VoteState = v ? v.vote : assumeMissing ? "assumed" : "pending";
+      r.votes[m.id] = state;
+      if (state === "yes" || state === "assumed") r.yes.push(m.name);
+      else if (state === "maybe") r.maybe.push({ name: m.name, knownBy: v?.known_by ?? null });
+      else if (state === "no") r.no.push(m.name);
+      else r.pending.push(m.name);
     }
-    return sawMaybe ? "maybe" : "free";
-  };
-  const states = days.map(dayState);
+    r.works = r.no.length || r.pending.length ? "no" : r.maybe.length ? "maybe" : "everyone";
+    return r;
+  });
 
-  const runs = (accept: (i: number) => boolean) => {
-    const out: [number, number][] = [];
-    let start = -1;
-    for (let i = 0; i <= days.length; i++) {
-      if (i < days.length && accept(i)) {
-        if (start < 0) start = i;
-      } else if (start >= 0) {
-        if (i - start >= MIN_WINDOW) out.push([start, i - 1]);
-        start = -1;
-      }
-    }
-    return out;
-  };
-
-  const full: DateWindow[] = runs((i) => states[i] === "free").map(([a, b]) => ({
-    start: days[a],
-    end: days[b],
-    length: b - a + 1,
-    unsure: [],
-    missing: [],
-    available: members.length,
-  }));
-
-  const maybe: DateWindow[] = runs((i) => states[i] !== "no")
-    .filter(([a, b]) => states.slice(a, b + 1).includes("maybe"))
-    .map(([a, b]) => {
-      const unsure: UnsureMember[] = [];
-      for (const m of members) {
-        const ds = days.slice(a, b + 1).filter((d) => grid[m.id][d] === "maybe");
-        if (ds.length) {
-          const kb = ds.map((d) => knownBy.get(`${m.id}|${d}`)).filter(Boolean) as string[];
-          unsure.push({ memberId: m.id, name: m.name, days: ds, knownBy: kb.sort().at(-1) ?? null });
-        }
-      }
-      return { start: days[a], end: days[b], length: b - a + 1, unsure, missing: [], available: members.length };
-    });
-
-  let best: DateWindow[] = [];
-  if (full.length === 0) best = bestEffort(members, grid, days);
-
-  return {
-    days,
-    grid,
-    full,
-    maybe,
-    best,
-    waitingOn: deadlinePassed ? [] : members.filter((m) => !m.submitted_at),
-    assumed: deadlinePassed ? members.filter((m) => !m.submitted_at) : [],
-  };
+  const full = results.filter((r) => r.works === "everyone");
+  const maybe = results.filter((r) => r.works === "maybe");
+  const best = full.length
+    ? []
+    : [...results]
+        .filter((r) => r.works === "no")
+        .sort((a, b) => b.yes.length + b.maybe.length - (a.yes.length + a.maybe.length) || a.start.localeCompare(b.start))
+        .slice(0, 3);
+  return { options: results, full, maybe, best, assumed: assumeMissing ? members.filter((m) => !m.submitted_at) : [] };
 }
 
-/** Top non-overlapping 2–4 day windows by how many people can make every day. */
-function bestEffort(
-  members: Member[],
-  grid: Record<string, Record<string, EffectiveStatus>>,
-  days: string[],
-): DateWindow[] {
-  const candidates: DateWindow[] = [];
-  for (let len = MAX_WINDOW; len >= MIN_WINDOW; len--) {
-    for (let i = 0; i + len <= days.length; i++) {
-      const span = days.slice(i, i + len);
-      const missing: DateWindow["missing"] = [];
-      for (const m of members) {
-        const ss = span.map((d) => grid[m.id][d]);
-        if (ss.includes("busy")) missing.push({ memberId: m.id, name: m.name, why: "busy" });
-        else if (ss.includes("unknown")) missing.push({ memberId: m.id, name: m.name, why: "unknown" });
-      }
-      candidates.push({
-        start: span[0],
-        end: span[len - 1],
-        length: len,
-        unsure: [],
-        missing,
-        available: members.length - missing.length,
-      });
-    }
-  }
-  // More people first, then longer windows (a 3-day trip beats a 2-day one), then earlier.
-  candidates.sort((a, b) => b.available - a.available || b.length - a.length || a.start.localeCompare(b.start));
-  const picked: DateWindow[] = [];
-  for (const c of candidates) {
-    if (c.available === 0) break;
-    if (picked.some((p) => !(c.end < p.start || c.start > p.end))) continue;
-    picked.push(c);
-    if (picked.length === 3) break;
-  }
-  return picked;
-}
-
-/** Does [start, end] (2–4 days) sit inside one of the given runs? */
-export function fitsInWindows(start: string, end: string, windows: DateWindow[]): DateWindow | null {
-  const len = daysBetween(start, end) + 1;
-  if (len < MIN_WINDOW || len > MAX_WINDOW) return null;
-  return windows.find((w) => start >= w.start && end <= w.end) ?? null;
-}
-
-/** Members who are busy (or still unknown) on any day of [start, end]. */
-export function blockersFor(
-  start: string,
-  end: string,
-  members: Member[],
-  grid: Record<string, Record<string, EffectiveStatus>>,
-): { name: string; day: string; status: EffectiveStatus }[] {
-  const out: { name: string; day: string; status: EffectiveStatus }[] = [];
-  for (let d = start; d <= end; d = addDays(d, 1)) {
-    for (const m of members) {
-      const s = grid[m.id]?.[d];
-      if (s === "busy" || s === "unknown" || s === undefined) out.push({ name: m.name, day: d, status: s ?? "busy" });
-    }
-  }
-  return out;
+/** The option a plan's dates sit on (plans must use one of the voted date options). */
+export function optionFor(start: string, end: string, options: OptionResult[]): OptionResult | null {
+  return options.find((o) => o.start === start && o.end === end) ?? null;
 }

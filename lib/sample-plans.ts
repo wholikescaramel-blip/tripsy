@@ -3,7 +3,7 @@
 // with someone's hard no's, and writes plans in exactly the shape Gemini returns.
 
 import type { PlanContext, VoteSummary } from "./plan-context";
-import type { PlanDraft } from "./types";
+import type { IdeaDraft, PlanDraft } from "./types";
 import { vetoHits } from "./rules";
 import { addDays, daysBetween } from "./time";
 
@@ -367,15 +367,19 @@ function pickDates(ctx: PlanContext, i: number): { start: string; end: string } 
   return { start, end: addDays(start, len - 1) };
 }
 
+/** Catalogue activity keys of the destinations someone swiped right on. */
+function likedKeys(names: string[]): Set<string> {
+  return new Set(CATALOG.filter((c) => names.includes(c.destination)).flatMap((c) => c.activities.map((a) => a.key)));
+}
+
 function fitLine(person: PlanContext["people"][number], acts: CatalogActivity[], d: Destination): string {
-  if (person.assumed) return `Didn't reply in time, so this one keeps things easy-going with nothing extreme.`;
+  if (person.assumed) return `Hasn't answered yet, so this one keeps things easy-going with nothing extreme.`;
   const lower = (t: string) => t[0].toLowerCase() + t.slice(1);
-  const liked = acts.filter((a) => person.activities.includes(a.key)).map((a) => lower(a.title));
-  const vibe = person.vibes.find((v) => d.vibes.includes(v));
-  if (liked.length >= 2) return `Gets ${liked[0]} and ${liked[1]} — both on their list.`;
-  if (liked.length === 1) return `${liked[0][0].toUpperCase()}${liked[0].slice(1)} is exactly what they asked for.`;
-  if (vibe) return `Matches the ${vibe} vibe they picked, with none of their hard no's.`;
-  return `Nothing on their no-list, and plenty of downtime to just hang out.`;
+  if (person.likedIdeas.includes(d.destination)) return `You swiped right on ${d.destination} — here it is, with ${lower(acts[0].title)}.`;
+  const keys = likedKeys(person.likedIdeas);
+  const match = acts.find((a) => keys.has(a.key));
+  if (match) return `${match.title} — the kind of thing you liked on your swipes.`;
+  return `Nothing on your hard-pass list, and plenty of downtime to just hang out.`;
 }
 
 function build(d: Destination, ctx: PlanContext, dates: { start: string; end: string }, preferKeys: string[] = []): PlanDraft | null {
@@ -385,7 +389,7 @@ function build(d: Destination, ctx: PlanContext, dates: { start: string; end: st
   const access = d.access.find((a) => allowed(a.tags));
   if (!access) return null;
 
-  const wanted = new Set([...preferKeys, ...ctx.people.flatMap((p) => p.activities)]);
+  const wanted = new Set([...preferKeys, ...likedKeys(ctx.people.flatMap((p) => p.likedIdeas))]);
   const acts = d.activities
     .filter((a) => allowed(a.tags))
     .sort((a, b) => Number(wanted.has(b.key)) - Number(wanted.has(a.key)));
@@ -417,17 +421,14 @@ function build(d: Destination, ctx: PlanContext, dates: { start: string; end: st
     tags: [...new Set([...d.tags, ...(d.stayTags ?? []), ...access.tags, ...chosen.flatMap((a) => a.tags ?? [])])],
   };
   // Belt and braces: never hand back something the code checker would reject for vetoes.
-  const clash = ctx.people.some((p) => vetoHits(plan, { member_id: "", home_city: "", vibes: [], activities: [], vetoes: p.vetoes, veto_notes: p.vetoNotes, wishes: "" }).length);
+  const clash = ctx.people.some((p) => vetoHits(plan, { vetoes: p.vetoes, veto_notes: p.vetoNotes }).length);
   return clash ? null : plan;
 }
 
 function score(d: Destination, ctx: PlanContext): number {
-  let s = 0;
-  for (const p of ctx.people) {
-    s += p.vibes.filter((v) => d.vibes.includes(v)).length * 2;
-    s += p.activities.filter((a) => d.activities.some((x) => x.key === a)).length;
-  }
-  return s;
+  const likes = ctx.ideaLikes.find((l) => l.destination === d.destination)?.likes ?? 0;
+  const keys = likedKeys(ctx.people.flatMap((p) => p.likedIdeas));
+  return likes * 4 + d.activities.filter((a) => keys.has(a.key)).length;
 }
 
 export function samplePlans(ctx: PlanContext, count: number, avoid: string[] = []): PlanDraft[] {
@@ -483,4 +484,32 @@ export function sampleBlend(ctx: PlanContext, votes: VoteSummary[], avoid: strin
     return plan;
   }
   return null;
+}
+
+function ideaEmoji(d: Destination): string {
+  if (d.tags.includes("beaches")) return "🏖️";
+  if (d.tags.includes("hill_stations")) return "🏔️";
+  if (/backwater|houseboat/i.test(d.stay + d.destination)) return "🛶";
+  if (d.vibes.includes("culture")) return "🏰";
+  if (d.activities.some((a) => a.key === "wildlife")) return "🐅";
+  return "🧭";
+}
+
+/** Destination idea cards for the swipe step (used when there's no Gemini key, and for the demo). */
+export function sampleIdeas(count = 8): IdeaDraft[] {
+  // A spread of trip styles: beach, hills, heritage, backwaters, adventure, city, villa…
+  const order = ["North Goa", "Coorg", "Udaipur", "Alleppey backwaters", "Rishikesh", "Pondicherry", "Hampi", "Lonavala villa weekend", "Gokarna", "Jim Corbett"];
+  const picked = order.map((n) => CATALOG.find((c) => c.destination === n)!).filter(Boolean);
+  return picked.slice(0, Math.max(count, 1)).map((d) => {
+    const highlights = d.activities.slice(0, 3);
+    return {
+      destination: d.destination,
+      region: d.region,
+      pitch: `${d.vibes.slice(0, 2).join(" + ")} — ${d.stay.toLowerCase()}`,
+      highlights: highlights.map((a) => a.title),
+      emoji: ideaEmoji(d),
+      cost_estimate: roundTo(d.access[0].cost + d.perDay * 3, 1000),
+      tags: [...new Set([...d.tags, ...(d.stayTags ?? []), ...highlights.flatMap((a) => a.tags ?? [])])],
+    };
+  });
 }

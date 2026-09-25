@@ -1,4 +1,4 @@
-import type { AvailabilityRow, ChangeEntry, Member, NudgeLog, Plan, Preferences, Swipe, Trip, TripBundle } from "../types";
+import type { ChangeEntry, DateOption, DateVote, IdeaDraft, IdeaSwipe, Member, NudgeLog, Plan, Preferences, Swipe, Trip, TripBundle } from "../types";
 
 export interface NewTripInput {
   slug: string;
@@ -7,7 +7,6 @@ export interface NewTripInput {
   target_month: string;
   deadline: string;
   is_demo: boolean;
-  expected_size: number | null;
   members: { name: string; phone: string; is_coordinator: boolean }[];
 }
 
@@ -26,16 +25,25 @@ export interface Store {
   updateTrip(tripId: string, patch: Partial<Trip>): Promise<void>;
   /** Atomically apply `patch` only if the trip still matches `expect`. Returns false if someone else got there first. */
   claimTrip(tripId: string, expect: Partial<Trip>, patch: Partial<Trip>): Promise<boolean>;
-  /** A friend joins the trip themselves from the shared link. */
+
   addMember(tripId: string, m: { name: string; phone: string }): Promise<Member>;
+  removeMember(memberId: string): Promise<void>;
   updateMember(memberId: string, patch: Partial<Member>): Promise<void>;
-  replaceAvailability(tripId: string, memberId: string, rows: AvailabilityRow[]): Promise<void>;
+
+  addDateOptions(tripId: string, options: Pick<DateOption, "start_date" | "end_date" | "added_by">[]): Promise<void>;
+  removeDateOption(optionId: string): Promise<void>;
+  upsertDateVote(tripId: string, vote: Omit<DateVote, "updated_at">): Promise<void>;
+
+  insertIdeas(tripId: string, ideas: IdeaDraft[]): Promise<void>;
+  upsertIdeaSwipe(tripId: string, swipe: IdeaSwipe): Promise<void>;
+
   upsertPreferences(tripId: string, prefs: Preferences): Promise<void>;
   setBudget(memberId: string, min: number, max: number): Promise<void>;
   /** For each cost, memberId -> fits. Members without a budget use the average of the others. */
   budgetFits(tripId: string, costs: number[]): Promise<Record<string, boolean>[]>;
   /** Lowest per-person max across the group (nobody's identity attached). Null if no budgets yet. */
   budgetCeiling(tripId: string): Promise<number | null>;
+
   insertPlans(plans: NewPlan[]): Promise<Plan[]>;
   updatePlan(planId: string, patch: Partial<Plan>): Promise<void>;
   upsertSwipe(tripId: string, swipe: Omit<Swipe, "updated_at">): Promise<void>;
