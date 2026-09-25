@@ -14,6 +14,10 @@ do $$
 declare t text;
 begin
   foreach t in array array['trips','members','date_options','date_votes','ideas','idea_swipes','preferences','plans','swipes','changes','nudge_log'] loop
+    if to_regclass('public.' || t) is null then
+      raise warning 'Table % is missing — run supabase/schema.sql to create all tables', t;
+      continue;
+    end if;
     execute format('alter table public.%I enable row level security', t);
     execute format('grant select, insert, update, delete on public.%I to anon, authenticated, service_role', t);
     execute format('drop policy if exists "public access" on public.%I', t);
