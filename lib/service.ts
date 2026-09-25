@@ -10,7 +10,7 @@ import type { PlanContext, VoteSummary } from "./plan-context";
 import { checkPlan } from "./rules";
 import { store } from "./store";
 import type { NewPlan } from "./store/types";
-import { addDays, daysBetween, fmtRange, istDay } from "./time";
+import { addDays, daysBetween, fmtDateTime, fmtRange, istDay } from "./time";
 import type { DateVoteValue, IdeaDraft, Plan, PlanDraft, TripBundle } from "./types";
 
 export { AppError };
@@ -142,6 +142,18 @@ export async function removeDateOption(slug: string, optionId: string, now: Date
   await store.removeDateOption(optionId);
   await log(b, `🗑️ Date option ${fmtRange(o.start_date, o.end_date)} was removed`, "dates");
   if (b.trip.status !== "collecting") await reconcile(slug, now);
+  return { ok: true };
+}
+
+export async function setDeadline(slug: string, deadline: Date, now: Date) {
+  const b = await load(slug);
+  notFrozen(b);
+  if (b.trip.status !== "collecting") throw new AppError(409, "Plans are already made — the answer deadline no longer matters.");
+  if (Number.isNaN(deadline.getTime())) throw new AppError(400, "Pick a date and time.");
+  if (deadline.getTime() <= now.getTime()) throw new AppError(400, "The new deadline should be in the future.");
+  await store.updateTrip(b.trip.id, { deadline: deadline.toISOString() });
+  const later = deadline.getTime() > Date.parse(b.trip.deadline);
+  await log(b, `⏰ Deadline ${later ? "extended" : "moved up"} to ${fmtDateTime(deadline.toISOString())} IST`, "deadline");
   return { ok: true };
 }
 

@@ -5,6 +5,7 @@ import { ConfirmButton } from "@/components/ConfirmButton";
 import { Countdown } from "@/components/Countdown";
 import { ChangeFeed, DatesPanel, IdeasPanel, LockStatus, WhoIsIn } from "@/components/Panels";
 import { PlanCard } from "@/components/PlanCard";
+import { Receipt } from "@/components/Receipt";
 import { RefreshOnFocus } from "@/components/RefreshOnFocus";
 import { Card, SectionTitle, Stepper } from "@/components/ui";
 import { tripPage } from "@/lib/page-data";
@@ -125,6 +126,7 @@ export default async function Hub({ params }: PageProps<"/t/[slug]/[memberId]">)
             <h2 className="mt-2 font-display text-2xl font-extrabold">{frozen ? "It's official. Go book it!" : "Everyone said yes!"}</h2>
             <p className="text-sm text-ink-soft">{frozen ? "Everyone's leave is sorted. The plan is frozen." : "Last step: tap below once your leave is sorted."}</p>
           </div>
+          {view.receipt && <Receipt tripName={view.trip.name} plan={view.agreedPlan} receipt={view.receipt} />}
           <PlanCard plan={view.agreedPlan} members={members} meId={me.id} />
           <Card>
             <SectionTitle emoji="🔐">Lock status</SectionTitle>

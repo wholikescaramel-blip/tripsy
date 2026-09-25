@@ -214,3 +214,38 @@ export function DateOptionControls({ slug, adminKey, options }: { slug: string; 
     </details>
   );
 }
+
+/** Riya moves the answer deadline. Reminders restart from the new one. */
+export function DeadlineControl({ slug, adminKey, current }: { slug: string; adminKey: string; current: string }) {
+  const router = useRouter();
+  const [value, setValue] = useState(current);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  return (
+    <div className="mt-3 rounded-2xl bg-white/10 p-3">
+      <p className="text-xs font-bold tracking-wide text-white/60 uppercase">Answer deadline (IST)</p>
+      <div className="mt-2 flex gap-2">
+        <input type="datetime-local" value={value} onChange={(e) => setValue(e.target.value)} className="min-w-0 flex-1 rounded-xl bg-white px-3 py-2 text-sm text-ink" />
+        <button
+          disabled={busy || value === current}
+          onClick={async () => {
+            setBusy(true);
+            setMsg(null);
+            try {
+              await adminPost(`/api/t/${slug}/deadline`, { adminKey, deadline: value });
+              setMsg("Deadline updated ✓");
+              router.refresh();
+            } catch (err) {
+              setMsg(err instanceof Error ? err.message : String(err));
+            }
+            setBusy(false);
+          }}
+          className="shrink-0 rounded-xl bg-coral px-4 text-sm font-bold text-white disabled:opacity-40"
+        >
+          Save
+        </button>
+      </div>
+      {msg && <p className="mt-2 text-xs font-semibold">{msg}</p>}
+    </div>
+  );
+}

@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { AddPerson, CopyLink, DateOptionControls, FreshPlansButton, NudgeButton, RemovePerson, StartPlanningButton } from "@/components/AdminBits";
+import { AddPerson, CopyLink, DateOptionControls, DeadlineControl, FreshPlansButton, NudgeButton, RemovePerson, StartPlanningButton } from "@/components/AdminBits";
+import { Receipt } from "@/components/Receipt";
 import { AutoPlanner } from "@/components/AutoPlanner";
 import { Countdown } from "@/components/Countdown";
 import { DemoPanel } from "@/components/DemoPanel";
@@ -8,10 +9,10 @@ import { PlanCard } from "@/components/PlanCard";
 import { RefreshOnFocus } from "@/components/RefreshOnFocus";
 import { Avatar, Card, Empty, Pill, ProgressRing, SectionTitle, Stepper } from "@/components/ui";
 import { timeOffsetHours } from "@/lib/clock";
-import { computeNudges, groupUpdateMessage, waLink, waShare } from "@/lib/nudges";
+import { computeNudges, groupUpdateMessage, personalNudge, waLink, waShare } from "@/lib/nudges";
 import { tripPage } from "@/lib/page-data";
 import { MAX_BLEND_ROUNDS } from "@/lib/service";
-import { fmtDateTime, fmtDay, fmtMonth, fmtRange, inr } from "@/lib/time";
+import { fmtDateTime, fmtDay, fmtMonth, fmtRange, inr, toIstLocal } from "@/lib/time";
 import type { PlanView } from "@/lib/view";
 
 export const dynamic = "force-dynamic";
@@ -83,6 +84,7 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
             </Link>
           )}
         </div>
+        {status === "collecting" && <DeadlineControl slug={slug} adminKey={key} current={toIstLocal(new Date(view.trip.deadline))} />}
       </header>
 
       <Stepper status={status} />
@@ -159,8 +161,16 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
         </div>
         <ul className="flex flex-col gap-3">
           {view.members.map((m, i) => {
-            const personal = `${tripUrl}/${m.id}`;
-            const invite = `Hey ${m.name}! ✈️ Planning "${view.trip.name}" — tap here (it's already you): ${personal}`;
+            const invite = personalNudge({
+              name: m.name,
+              from: coordinator?.name ?? "Riya",
+              tripName: view.trip.name,
+              status,
+              submitted: m.submitted,
+              swipesPending: view.currentPlans.filter((p) => !p.votes[m.id]).length,
+              confirmed: m.confirmed,
+              personalUrl: `${tripUrl}/${m.id}`,
+            });
             return (
               <li key={m.id} className="flex items-center gap-3">
                 <Avatar name={m.name} index={i} size={36} dim={!m.submitted && !m.assumed} />
@@ -175,7 +185,7 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
                 {!m.isCoordinator && !frozen && (
                   <>
                     <a href={waLink(m.phone ?? "", invite)} target="_blank" rel="noreferrer" className="shrink-0 rounded-full bg-free-soft px-3 py-1.5 text-xs font-bold text-emerald-800">
-                      💬 Link
+                      💬 Nudge
                     </a>
                     <RemovePerson slug={slug} adminKey={key} memberId={m.id} name={m.name} />
                   </>
@@ -292,6 +302,7 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
       </Card>
 
       {/* 6. Lock */}
+      {view.agreedPlan && view.receipt && <Receipt tripName={view.trip.name} plan={view.agreedPlan} receipt={view.receipt} tripUrl={tripUrl} />}
       {view.agreedPlan && <PlanCard plan={view.agreedPlan} members={members} showVotes compact />}
       <Card>
         <SectionTitle emoji="🔐">Lock status</SectionTitle>

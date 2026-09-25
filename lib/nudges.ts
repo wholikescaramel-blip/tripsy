@@ -78,7 +78,8 @@ export function computeNudges(args: {
           : stage === "24h"
             ? `${m.name}, 24 hours left for "${trip.name}"! ⏳ A few taps on dates + swipe some ideas: ${link}`
             : `Hey ${m.name}, it's ${from} 🙂 Honestly I'd love to not be the one chasing everyone — could you tap in your dates for "${trip.name}" tonight? Only 12 hours left and I don't want us to plan without you. ${link}`;
-      push(m, stage, stage, stage === "12h" ? `12h left — personal note from ${from}` : `${stage} before deadline`, msg, stage === "12h");
+      // Keyed to the deadline, so moving the deadline restarts the 48h/24h/12h reminders.
+      push(m, stage, `${stage}@${trip.deadline.slice(0, 16)}`, stage === "12h" ? `12h left — personal note from ${from}` : `${stage} before deadline`, msg, stage === "12h");
     }
   }
 
@@ -150,4 +151,22 @@ export function groupUpdateMessage(args: {
     .map((p, i) => `${i + 1}. ${p.destination} · ${fmtRange(p.start_date, p.end_date)} · ≈ ${inr(p.cost_per_person)}/person`)
     .join("\n");
   return `🔥 Our top ${Math.min(plans.length, 3)} hot spots for "${tripName}" are in!\n${list}\n\nTap your name and swipe yes/no on each — 30 seconds: ${tripUrl}`;
+}
+
+/** Riya can nudge anyone at any time: the message fits where that person is. */
+export function personalNudge(args: {
+  name: string;
+  from: string;
+  tripName: string;
+  status: Trip["status"];
+  submitted: boolean;
+  swipesPending: number;
+  confirmed: boolean;
+  personalUrl: string;
+}): string {
+  const { name, from, tripName, status, submitted, swipesPending, confirmed, personalUrl } = args;
+  if (status === "collecting" && !submitted) return `Hey ${name}! It's ${from} 🙂 Got a minute for "${tripName}"? Tap in — a few dates, swipe some ideas, done: ${personalUrl}`;
+  if ((status === "voting" || status === "stuck") && swipesPending > 0) return `${name}! 🗳️ Plans for "${tripName}" are waiting on your swipe — yes or no, 30 seconds: ${personalUrl}/swipe`;
+  if (status === "agreed" && !confirmed) return `${name}, we all said yes to "${tripName}" 🎉 Tap "I'm confirmed" once your leave is sorted: ${personalUrl}`;
+  return `Hey ${name}! Here's your link for "${tripName}" ✈️ ${personalUrl}`;
 }

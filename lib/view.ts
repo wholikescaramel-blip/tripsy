@@ -32,6 +32,7 @@ export interface PlanView extends Plan {
   declines: { name: string; reason: string | null }[];
   pending: string[];
   votes: Record<string, "accept" | "decline">; // memberId -> decision
+  voteTimes: Record<string, string>; // memberId -> when they swiped
   dependsOnMaybe: string[];
 }
 
@@ -63,6 +64,17 @@ export interface TripView {
   changes: ChangeEntry[];
   readyToPlan: boolean;
   everyoneAnswered: boolean;
+  receipt: Receipt | null;
+}
+
+/** Proof of what the group decided — shown once a plan is agreed. */
+export interface Receipt {
+  agreedAt: string | null;
+  frozenAt: string | null;
+  people: { name: string; saidYesAt: string | null; confirmedAt: string | null }[];
+  changesAlongTheWay: number;
+  hardPassesRespected: number;
+  plansConsidered: number;
 }
 
 export function buildView(b: TripBundle, now: Date, opts: { admin?: boolean } = {}): TripView {
@@ -101,6 +113,7 @@ export function buildView(b: TripBundle, now: Date, opts: { admin?: boolean } = 
       declines: s.filter((x) => x.decision === "decline").map((x) => ({ name: name(x.member_id), reason: x.reason })),
       pending: b.members.filter((m) => !votes[m.id]).map((m) => m.name),
       votes,
+      voteTimes: Object.fromEntries(s.map((x) => [x.member_id, x.updated_at])),
       dependsOnMaybe: live ? checkPlan(p, b.members, b.preferences, dates, {}).dependsOnMaybe : [],
     };
   };
@@ -163,5 +176,15 @@ export function buildView(b: TripBundle, now: Date, opts: { admin?: boolean } = 
     changes: b.changes,
     readyToPlan: readyToPlan(b, dates, now),
     everyoneAnswered: everyoneAnswered(b),
+    receipt: agreedPlan
+      ? {
+          agreedAt: b.changes.find((c) => c.kind === "agreed")?.created_at ?? null, // newest first
+          frozenAt: b.changes.find((c) => c.kind === "confirmed")?.created_at ?? null,
+          people: b.members.map((m) => ({ name: m.name, saidYesAt: agreedPlan.voteTimes[m.id] ?? null, confirmedAt: m.confirmed_at })),
+          changesAlongTheWay: b.changes.filter((c) => c.kind === "edit").length,
+          hardPassesRespected: new Set(b.preferences.flatMap((p) => p.vetoes)).size,
+          plansConsidered: b.plans.length,
+        }
+      : null,
   };
 }
