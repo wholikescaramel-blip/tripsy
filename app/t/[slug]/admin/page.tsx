@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { AddPerson, CopyLink, DateOptionControls, DeadlineControl, FreshPlansButton, NudgeButton, RemovePerson, StartPlanningButton } from "@/components/AdminBits";
-import { Receipt } from "@/components/Receipt";
+import { TicketBook } from "@/components/Tickets";
 import { AutoPlanner } from "@/components/AutoPlanner";
 import { Countdown } from "@/components/Countdown";
 import { DemoPanel } from "@/components/DemoPanel";
@@ -302,7 +302,7 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
       </Card>
 
       {/* 6. Lock */}
-      {view.agreedPlan && view.receipt && <Receipt tripName={view.trip.name} plan={view.agreedPlan} receipt={view.receipt} tripUrl={tripUrl} />}
+      {view.agreedPlan && view.receipt && <TicketBook tripName={view.trip.name} plan={view.agreedPlan} receipt={view.receipt} tripUrl={tripUrl} />}
       {view.agreedPlan && <PlanCard plan={view.agreedPlan} members={members} showVotes compact />}
       <Card>
         <SectionTitle emoji="🔐">Lock status</SectionTitle>

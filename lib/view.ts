@@ -71,7 +71,7 @@ export interface TripView {
 export interface Receipt {
   agreedAt: string | null;
   frozenAt: string | null;
-  people: { name: string; saidYesAt: string | null; confirmedAt: string | null }[];
+  people: { id: string; name: string; homeCity: string; saidYesAt: string | null; confirmedAt: string | null }[];
   changesAlongTheWay: number;
   hardPassesRespected: number;
   plansConsidered: number;
@@ -180,7 +180,13 @@ export function buildView(b: TripBundle, now: Date, opts: { admin?: boolean } = 
       ? {
           agreedAt: b.changes.find((c) => c.kind === "agreed")?.created_at ?? null, // newest first
           frozenAt: b.changes.find((c) => c.kind === "confirmed")?.created_at ?? null,
-          people: b.members.map((m) => ({ name: m.name, saidYesAt: agreedPlan.voteTimes[m.id] ?? null, confirmedAt: m.confirmed_at })),
+          people: b.members.map((m) => ({
+            id: m.id,
+            name: m.name,
+            homeCity: b.preferences.find((p) => p.member_id === m.id)?.home_city ?? "",
+            saidYesAt: agreedPlan.voteTimes[m.id] ?? null,
+            confirmedAt: m.confirmed_at,
+          })),
           changesAlongTheWay: b.changes.filter((c) => c.kind === "edit").length,
           hardPassesRespected: new Set(b.preferences.flatMap((p) => p.vetoes)).size,
           plansConsidered: b.plans.length,
