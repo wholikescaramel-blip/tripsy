@@ -26,6 +26,12 @@ begin
   end loop;
 end $$;
 
+do $$
+begin
+  if to_regclass('public.member_budgets') is null then
+    raise exception 'Tables are missing — run supabase/schema.sql first (it creates everything, then this is included).';
+  end if;
+end $$;
 alter table public.member_budgets enable row level security;
 revoke all on public.member_budgets from anon, authenticated;
 grant all on public.member_budgets to service_role;
