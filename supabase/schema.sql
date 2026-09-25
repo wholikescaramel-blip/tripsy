@@ -25,6 +25,8 @@ create table trips (
   created_at timestamptz not null default now()
 );
 alter table trips enable row level security;
+grant select, insert, update, delete on trips to anon, authenticated, service_role;
+create policy "public access" on trips for all to anon, authenticated using (true) with check (true);
 
 create table members (
   id uuid primary key default gen_random_uuid(),
@@ -39,6 +41,8 @@ create table members (
   confirmed_at timestamptz
 );
 alter table members enable row level security;
+grant select, insert, update, delete on members to anon, authenticated, service_role;
+create policy "public access" on members for all to anon, authenticated using (true) with check (true);
 create index on members(trip_id);
 
 create table date_options (
@@ -50,6 +54,8 @@ create table date_options (
   created_at timestamptz not null default clock_timestamp()
 );
 alter table date_options enable row level security;
+grant select, insert, update, delete on date_options to anon, authenticated, service_role;
+create policy "public access" on date_options for all to anon, authenticated using (true) with check (true);
 create index on date_options(trip_id);
 
 create table date_votes (
@@ -62,6 +68,8 @@ create table date_votes (
 );
 alter table date_votes add primary key (option_id, member_id);
 alter table date_votes enable row level security;
+grant select, insert, update, delete on date_votes to anon, authenticated, service_role;
+create policy "public access" on date_votes for all to anon, authenticated using (true) with check (true);
 create index on date_votes(trip_id);
 
 create table ideas (
@@ -77,6 +85,8 @@ create table ideas (
   sort_order int not null default 0
 );
 alter table ideas enable row level security;
+grant select, insert, update, delete on ideas to anon, authenticated, service_role;
+create policy "public access" on ideas for all to anon, authenticated using (true) with check (true);
 create index on ideas(trip_id);
 
 create table idea_swipes (
@@ -87,6 +97,8 @@ create table idea_swipes (
 );
 alter table idea_swipes add primary key (idea_id, member_id);
 alter table idea_swipes enable row level security;
+grant select, insert, update, delete on idea_swipes to anon, authenticated, service_role;
+create policy "public access" on idea_swipes for all to anon, authenticated using (true) with check (true);
 create index on idea_swipes(trip_id);
 
 create table preferences (
@@ -97,6 +109,8 @@ create table preferences (
   veto_notes text not null default ''
 );
 alter table preferences enable row level security;
+grant select, insert, update, delete on preferences to anon, authenticated, service_role;
+create policy "public access" on preferences for all to anon, authenticated using (true) with check (true);
 create index on preferences(trip_id);
 
 -- Private. No read policy at all: only the security-definer functions below touch it.
@@ -106,6 +120,7 @@ create table member_budgets (
   budget_max int not null
 );
 alter table member_budgets enable row level security;
+grant all on member_budgets to service_role; -- the public key gets NO access to budgets
 
 create table plans (
   id uuid primary key default gen_random_uuid(),
@@ -131,6 +146,8 @@ create table plans (
   created_at timestamptz not null default clock_timestamp()
 );
 alter table plans enable row level security;
+grant select, insert, update, delete on plans to anon, authenticated, service_role;
+create policy "public access" on plans for all to anon, authenticated using (true) with check (true);
 create index on plans(trip_id);
 
 create table swipes (
@@ -143,6 +160,8 @@ create table swipes (
 );
 alter table swipes add primary key (plan_id, member_id);
 alter table swipes enable row level security;
+grant select, insert, update, delete on swipes to anon, authenticated, service_role;
+create policy "public access" on swipes for all to anon, authenticated using (true) with check (true);
 create index on swipes(trip_id);
 
 create table changes (
@@ -154,6 +173,8 @@ create table changes (
   created_at timestamptz not null default clock_timestamp()
 );
 alter table changes enable row level security;
+grant select, insert, update, delete on changes to anon, authenticated, service_role;
+create policy "public access" on changes for all to anon, authenticated using (true) with check (true);
 create index on changes(trip_id);
 
 create table nudge_log (
@@ -164,25 +185,35 @@ create table nudge_log (
 );
 alter table nudge_log add primary key (member_id, nudge_kind);
 alter table nudge_log enable row level security;
+grant select, insert, update, delete on nudge_log to anon, authenticated, service_role;
+create policy "public access" on nudge_log for all to anon, authenticated using (true) with check (true);
 
--- Row level security is enabled on every table right after it is created (above).
--- The app only has the public key, so policies open every table to it EXCEPT
--- member_budgets, which has RLS on and no policies (= nobody can read it).
+-- ============================================================================
+-- ACCESS: who may use what. Also in supabase/fix-permissions.sql (safe to re-run, keeps data).
+-- The app only uses the public (publishable/anon) key. It can read and write everything
+-- EXCEPT member_budgets; budgets are only reachable through the three functions below.
+-- ============================================================================
+
+grant usage on schema public to anon, authenticated, service_role;
 
 do $$
 declare t text;
 begin
   foreach t in array array['trips','members','date_options','date_votes','ideas','idea_swipes','preferences','plans','swipes','changes','nudge_log'] loop
-    execute format('create policy "anon all %1$s" on %1$I for all to anon, authenticated using (true) with check (true)', t);
+    execute format('alter table public.%I enable row level security', t);
+    execute format('grant select, insert, update, delete on public.%I to anon, authenticated, service_role', t);
+    execute format('drop policy if exists "public access" on public.%I', t);
+    execute format('drop policy if exists "anon all %1$s" on public.%1$I', t);
+    execute format('create policy "public access" on public.%I for all to anon, authenticated using (true) with check (true)', t);
   end loop;
 end $$;
 
-grant usage on schema public to anon, authenticated;
-grant select, insert, update, delete on all tables in schema public to anon, authenticated;
-revoke all on member_budgets from anon, authenticated;
+alter table public.member_budgets enable row level security;
+revoke all on public.member_budgets from anon, authenticated;
+grant all on public.member_budgets to service_role;
 
 -- Write a budget (never readable back).
-create function set_budget(p_member uuid, p_min int, p_max int) returns void
+create or replace function public.set_budget(p_member uuid, p_min int, p_max int) returns void
 language sql security definer set search_path = public as $$
   insert into member_budgets(member_id, budget_min, budget_max)
   values (p_member, p_min, p_max)
@@ -191,7 +222,7 @@ language sql security definer set search_path = public as $$
 $$;
 
 -- For each cost, does it fit each member? Members without a budget get the average of the others.
-create function budget_fits(p_trip uuid, p_costs int[])
+create or replace function public.budget_fits(p_trip uuid, p_costs int[])
 returns table(cost_index int, member_id uuid, fits boolean)
 language sql security definer set search_path = public as $$
   with m as (
@@ -207,7 +238,7 @@ language sql security definer set search_path = public as $$
 $$;
 
 -- Lowest effective max budget in the group (no names attached) — used to steer Gemini.
-create function budget_ceiling(p_trip uuid) returns int
+create or replace function public.budget_ceiling(p_trip uuid) returns int
 language sql security definer set search_path = public as $$
   with m as (
     select b.budget_max from members mem
@@ -217,6 +248,9 @@ language sql security definer set search_path = public as $$
   select min(coalesce(budget_max, (select avg(budget_max) from m)))::int from m;
 $$;
 
-grant execute on function set_budget(uuid, int, int) to anon, authenticated;
-grant execute on function budget_fits(uuid, int[]) to anon, authenticated;
-grant execute on function budget_ceiling(uuid) to anon, authenticated;
+grant execute on function public.set_budget(uuid, int, int) to anon, authenticated, service_role;
+grant execute on function public.budget_fits(uuid, int[]) to anon, authenticated, service_role;
+grant execute on function public.budget_ceiling(uuid) to anon, authenticated, service_role;
+
+-- Make the API pick up the new tables and permissions straight away.
+notify pgrst, 'reload schema';

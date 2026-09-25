@@ -31,7 +31,8 @@ Riya's dashboard with **demo controls**:
    - `GEMINI_API_KEY` (from Google AI Studio)
    - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (Supabase → Project Settings → API)
 3. Restart `npm run dev`. The demo button now seeds the demo trip into Supabase.
-4. Open **`/status`** — it checks the URL, key, tables, budget privacy and Gemini, and says exactly what to fix.
+4. If you ever see **"permission denied for table …"**, run [`supabase/fix-permissions.sql`](supabase/fix-permissions.sql) in the SQL Editor — it keeps your data.
+5. Open **`/status`** — it checks the URL, key, tables, budget privacy and Gemini, and says exactly what to fix.
 
 `.env.local` is git-ignored — keys never go to GitHub.
 

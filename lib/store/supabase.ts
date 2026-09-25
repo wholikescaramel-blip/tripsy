@@ -12,6 +12,10 @@ function sb(): SupabaseClient {
 }
 
 function check<T>(res: { data: T; error: { message: string; hint?: string | null } | null }): T {
+  if (res.error?.message.includes("permission denied")) {
+    // Newer Supabase projects don't grant new tables to the public key automatically.
+    throw new Error(`Supabase: ${res.error.message}. Fix: in Supabase → SQL Editor run supabase/fix-permissions.sql from the repo (safe, keeps your data)`);
+  }
   if (res.error) throw new Error(`Supabase: ${res.error.message}${res.error.hint ? ` (${res.error.hint})` : ""}`);
   return res.data;
 }

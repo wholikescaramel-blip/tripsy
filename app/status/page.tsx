@@ -41,24 +41,27 @@ async function databaseChecks(): Promise<Check[]> {
         break;
       }
     }
+    const denied = error?.message.includes("permission denied");
     checks.push({
       label: "Database tables",
       ok: !error,
       detail: error ? error.message : "All 11 tables found and readable",
-      fix: "Run the latest supabase/schema.sql in Supabase → SQL Editor (click “Run without RLS” — the file enables RLS itself).",
+      fix: denied
+        ? "Tables exist but the public key isn't allowed in. In Supabase → SQL Editor → New query, paste supabase/fix-permissions.sql and Run. It keeps your data."
+        : "Run the latest supabase/schema.sql in Supabase → SQL Editor (click “Run without RLS” — the file enables RLS itself).",
     });
     const { error: rpcError } = await sb.rpc("budget_ceiling", { p_trip: "00000000-0000-0000-0000-000000000000" });
     checks.push({
       label: "Private budget functions",
       ok: !rpcError,
       detail: rpcError ? rpcError.message : "Working",
-      fix: "Re-run supabase/schema.sql — the functions are at the bottom of the file.",
+      fix: "Run supabase/fix-permissions.sql in Supabase → SQL Editor (safe, keeps data).",
     });
     const { error: leak } = await sb.from("member_budgets").select("member_id").limit(1);
     checks.push({
       label: "Budgets hidden from the public key",
       ok: Boolean(leak),
-      detail: leak ? "Yes — reading budgets is refused" : "NO — budgets are readable! Re-run supabase/schema.sql",
+      detail: leak ? "Yes — reading budgets is refused" : "NO — budgets are readable! Run supabase/fix-permissions.sql",
     });
   } catch (err) {
     checks.push({ label: "Database connection", ok: false, detail: err instanceof Error ? err.message : String(err), fix: "Check the Project URL is right and the project isn't paused." });
