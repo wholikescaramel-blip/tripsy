@@ -105,7 +105,7 @@ export function computeNudges(args: {
     for (const m of members) {
       const pending = current.filter((p) => !swipes.some((s) => s.plan_id === p.id && s.member_id === m.id));
       if (!pending.length) continue;
-      const what = trip.blend_round ? "the blended plan" : `${pending.length} trip plan${pending.length > 1 ? "s" : ""}`;
+      const what = trip.blend_round ? "the blended plan" : `our top ${pending.length} hot spot${pending.length > 1 ? "s" : ""}`;
       push(m, "vote", `vote:${trip.blend_round}`, `Hasn't swiped ${what}`, `${m.name}! 🗳️ ${what} for "${trip.name}" ${trip.blend_round || pending.length === 1 ? "is" : "are"} waiting for your swipe — yes or no, takes 30 seconds: ${tripUrl}/${m.id}/swipe`);
     }
   }
@@ -124,4 +124,30 @@ export function computeNudges(args: {
     .map((n) => ({ ...n, name: names.get(n.member_id) ?? "?" }))
     .sort((a, b) => b.sent_at.localeCompare(a.sent_at));
   return { due, sent };
+}
+
+/** Message Riya posts in the group chat when there's something new to swipe or confirm. */
+export function groupUpdateMessage(args: {
+  tripName: string;
+  status: Trip["status"];
+  blendRound: number;
+  plans: Pick<Plan, "destination" | "start_date" | "end_date" | "cost_per_person">[];
+  agreed?: Pick<Plan, "destination" | "start_date" | "end_date"> | null;
+  tripUrl: string;
+}): string | null {
+  const { tripName, status, blendRound, plans, agreed, tripUrl } = args;
+  const inr = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
+  if ((status === "agreed" || status === "confirmed") && agreed) {
+    return `🎉 It's happening — "${tripName}" is ${agreed.destination}, ${fmtRange(agreed.start_date, agreed.end_date)}! Tap your name and hit "I'm confirmed" once your leave is sorted: ${tripUrl}`;
+  }
+  if (!plans.length || (status !== "voting" && status !== "stuck")) return null;
+  if (blendRound > 0) {
+    const p = plans[0];
+    return `🧪 We were split, so here's ONE plan that mixes everyone's favourite bits: ${p.destination}, ${fmtRange(p.start_date, p.end_date)} (≈ ${inr(p.cost_per_person)}/person). Tap your name and swipe yes or no: ${tripUrl}`;
+  }
+  const list = plans
+    .slice(0, 3)
+    .map((p, i) => `${i + 1}. ${p.destination} · ${fmtRange(p.start_date, p.end_date)} · ≈ ${inr(p.cost_per_person)}/person`)
+    .join("\n");
+  return `🔥 Our top ${Math.min(plans.length, 3)} hot spots for "${tripName}" are in!\n${list}\n\nTap your name and swipe yes/no on each — 30 seconds: ${tripUrl}`;
 }

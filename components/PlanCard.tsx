@@ -47,7 +47,8 @@ export function PlanCard({
   const look = planLook(plan);
   const nights = daysBetween(plan.start_date, plan.end_date);
   const days = new Map<number, string[]>();
-  plan.activities.forEach((a) => days.set(a.day ?? 1, [...(days.get(a.day ?? 1) ?? []), a.title]));
+  plan.activities.filter((a) => a.day !== 0).forEach((a) => days.set(a.day ?? 1, [...(days.get(a.day ?? 1) ?? []), a.title]));
+  const extras = plan.activities.filter((a) => a.day === 0).map((a) => a.title);
   const me = members.find((m) => m.id === meId);
 
   return (
@@ -100,6 +101,16 @@ export function PlanCard({
                 ))}
               </ol>
             </div>
+            {extras.length > 0 && (
+              <div className="rounded-2xl bg-sand p-3">
+                <p className="mb-1.5 text-xs font-bold tracking-wide text-coral-dark uppercase">✨ More to do in {plan.destination}</p>
+                <ul className="flex flex-col gap-1 text-sm">
+                  {extras.map((t) => (
+                    <li key={t}>• {t}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <div className="grid gap-2 text-sm">
               <p>
                 <span className="mr-1">🚆</span>

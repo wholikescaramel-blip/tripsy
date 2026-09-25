@@ -34,6 +34,11 @@ const PLAN_SCHEMA = {
         required: ["day", "title"],
       },
     },
+    things_to_do: {
+      type: "ARRAY",
+      description: "6-8 curated extra things to do in this place (must-try food, hidden gems, experiences, day trips) — beyond the day plan. Same hard-no rules apply.",
+      items: { type: "STRING" },
+    },
     travel: { type: "STRING", description: "How people get there from their home cities." },
     stay: { type: "STRING" },
     cost_per_person: { type: "INTEGER", description: "Rough INR per person incl. travel, stay, food, activities." },
@@ -51,7 +56,7 @@ const PLAN_SCHEMA = {
       items: { type: "STRING", enum: VETOES.map((v) => v.key) },
     },
   },
-  required: ["destination", "region", "summary", "start_date", "end_date", "activities", "travel", "stay", "cost_per_person", "fit_notes", "tags"],
+  required: ["destination", "region", "summary", "start_date", "end_date", "activities", "things_to_do", "travel", "stay", "cost_per_person", "fit_notes", "tags"],
 };
 
 const SYSTEM = `You plan short group trips in India for a group of friends who live in different cities.
@@ -121,16 +126,26 @@ async function callGemini(prompt: string, schema: object): Promise<unknown> {
   throw lastErr;
 }
 
-type RawPlan = Omit<PlanDraft, "fit_notes"> & { fit_notes: { name: string; line: string }[] };
+type RawPlan = Omit<PlanDraft, "fit_notes"> & { fit_notes: { name: string; line: string }[]; things_to_do?: string[] };
 
 function normalise(raw: RawPlan): PlanDraft {
+  const { things_to_do, ...plan } = raw; // things_to_do is folded into activities (day 0), not a column
   return {
-    ...raw,
+    ...plan,
     cost_per_person: Math.round(Number(raw.cost_per_person) || 0),
-    activities: (raw.activities ?? []).map((a) => ({ day: a.day, title: String(a.title) })),
+    activities: [
+      ...(raw.activities ?? []).map((a) => ({ day: Math.max(1, Number(a.day) || 1), title: String(a.title) })),
+      // Curated extras ride along as day 0, so the hard-pass checker scans them too.
+      ...(things_to_do ?? []).slice(0, 8).map((t) => ({ day: 0, title: String(t) })),
+    ],
     fit_notes: Object.fromEntries((raw.fit_notes ?? []).map((f) => [f.name, f.line])),
     tags: (raw.tags ?? []).filter((t) => VETO_BY_KEY[t]),
   };
+}
+
+const PLAN_FIELDS = ["destination", "region", "summary", "start_date", "end_date", "activities", "travel", "stay", "cost_per_person", "fit_notes", "tags"] as const;
+function pickPlan(p: PlanDraft): PlanDraft {
+  return Object.fromEntries(PLAN_FIELDS.map((k) => [k, p[k]])) as unknown as PlanDraft;
 }
 
 const IDEA_SCHEMA = {
@@ -197,7 +212,7 @@ ${describe(ctx)}`;
       properties: { plans: { type: "ARRAY", items: PLAN_SCHEMA } },
       required: ["plans"],
     })) as { plans: RawPlan[] };
-    return { plans: out.plans.slice(0, count).map(normalise), source: "gemini" };
+    return { plans: out.plans.slice(0, count).map(normalise).map(pickPlan), source: "gemini" };
   } catch {
     return { plans: samplePlans(ctx, count, avoid), source: "sample" };
   }
@@ -231,7 +246,7 @@ Group details:
 ${describe(ctx)}`;
   try {
     const out = (await callGemini(prompt, PLAN_SCHEMA)) as RawPlan;
-    return { plan: normalise(out), source: "gemini" };
+    return { plan: pickPlan(normalise(out)), source: "gemini" };
   } catch {
     return { plan: sampleBlend(ctx, votes, avoid), source: "sample" };
   }

@@ -28,7 +28,7 @@ export interface QuickStepsProps {
 const STEPS = [
   { title: "Which dates work?", emoji: "📅", hint: "Tap one answer for each." },
   { title: "Would you go?", emoji: "🃏", hint: "Swipe right if it sounds fun, left if not." },
-  { title: "Budget & home base", emoji: "💸", hint: "Private — nobody sees your budget, not even Riya." },
+  { title: "Budget & home base", emoji: "💸", hint: "Private — nobody else ever sees your budget." },
   { title: "Any hard passes?", emoji: "🙅", hint: "Plans will never include these. Skip if you're easy." },
 ];
 

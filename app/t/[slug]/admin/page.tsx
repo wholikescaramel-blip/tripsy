@@ -8,7 +8,7 @@ import { PlanCard } from "@/components/PlanCard";
 import { RefreshOnFocus } from "@/components/RefreshOnFocus";
 import { Avatar, Card, Empty, Pill, ProgressRing, SectionTitle, Stepper } from "@/components/ui";
 import { timeOffsetHours } from "@/lib/clock";
-import { computeNudges, waLink, waShare } from "@/lib/nudges";
+import { computeNudges, groupUpdateMessage, waLink, waShare } from "@/lib/nudges";
 import { tripPage } from "@/lib/page-data";
 import { MAX_BLEND_ROUNDS } from "@/lib/service";
 import { fmtDateTime, fmtDay, fmtMonth, fmtRange, inr } from "@/lib/time";
@@ -42,6 +42,14 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
   const members = view.members.map((m) => ({ id: m.id, name: m.name }));
   const status = view.trip.status;
   const frozen = status === "confirmed";
+  const update = groupUpdateMessage({
+    tripName: view.trip.name,
+    status,
+    blendRound: view.trip.blendRound,
+    plans: view.currentPlans,
+    agreed: view.agreedPlan,
+    tripUrl,
+  });
   const groupMsg = `✈️ ${view.trip.name}: tap the link, tap your name, say yes/no to a few dates and swipe some trip ideas for ${fmtMonth(view.trip.targetMonth)}. 1 minute! ${tripUrl}`;
 
   return (
@@ -80,6 +88,17 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
       <Stepper status={status} />
 
       {view.trip.isDemo && <DemoPanel offsetHours={await timeOffsetHours()} links={view.members.map((m) => ({ name: m.name, href: `/t/${slug}/${m.id}` }))} />}
+
+      {update && (
+        <Card className="border-2 !border-free/40">
+          <SectionTitle emoji="📣">Tell the group</SectionTitle>
+          <p className="rounded-2xl bg-sand p-3 text-sm whitespace-pre-line">{update}</p>
+          <a href={waShare(update)} target="_blank" rel="noreferrer" className="mt-3 flex w-full items-center justify-center rounded-2xl bg-free px-5 py-3 font-bold text-white">
+            💬 Post in the group chat
+          </a>
+          <p className="mt-2 text-center text-xs text-ink-faint">Opens WhatsApp — pick your trip group. Anyone who still hasn&apos;t swiped shows up under nudges.</p>
+        </Card>
+      )}
 
       {/* 1. Nudges due now */}
       <Card className={due.length ? "border-2 !border-coral/40" : ""}>

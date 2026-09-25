@@ -413,7 +413,10 @@ function build(d: Destination, ctx: PlanContext, dates: { start: string; end: st
     summary: `${days} days in ${d.destination}: ${d.vibes.slice(0, 2).join(" + ")} with something for everyone.`,
     start_date: dates.start,
     end_date: dates.end,
-    activities: chosen.map((a, i) => ({ title: a.title, day: Math.min(days, Math.floor(i / 2) + 1) })),
+    activities: [
+      ...chosen.map((a, i) => ({ title: a.title, day: Math.min(days, Math.floor(i / 2) + 1) })),
+      ...acts.filter((a) => !chosen.includes(a)).map((a) => ({ title: a.title, day: 0 })),
+    ],
     travel: homes.length ? `From ${homes.join(", ")}: ${access.text}` : access.text,
     stay,
     cost_per_person: roundTo(cost),

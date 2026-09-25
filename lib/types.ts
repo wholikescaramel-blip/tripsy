@@ -78,6 +78,7 @@ export interface Preferences {
 
 export interface PlanActivity {
   title: string;
+  /** 1..n = the day-by-day plan; 0 = "more things to do there" (curated extras). */
   day?: number;
 }
 
