@@ -121,9 +121,12 @@ export function PlanCard({
                 {plan.stay}
               </p>
             </div>
-            <div>
-              <p className="mb-1.5 text-xs font-bold tracking-wide text-ink-faint uppercase">How it fits everyone</p>
-              <ul className="flex flex-col gap-2">
+            <details className="group rounded-2xl border border-line px-3 py-2">
+              <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-bold tracking-wide text-ink-soft uppercase">
+                How it fits everyone
+                <span className="text-base transition group-open:rotate-180">⌄</span>
+              </summary>
+              <ul className="mt-2 flex flex-col gap-2">
                 {members.map((m, i) =>
                   plan.fit_notes[m.name] ? (
                     <li key={m.id} className="flex items-start gap-2.5 text-sm">
@@ -135,7 +138,7 @@ export function PlanCard({
                   ) : null,
                 )}
               </ul>
-            </div>
+            </details>
           </>
         )}
 
