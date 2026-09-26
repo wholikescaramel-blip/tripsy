@@ -16,6 +16,7 @@ const PEOPLE = [
   { action: "fill-preethi", label: "📝 Preethi submits" },
   { action: "swipe-split", label: "🃏 Others swipe: split" },
   { action: "swipe-yes", label: "🃏 Others swipe: all yes" },
+  { action: "pick-others", label: "🏆 Others pick a favourite" },
   { action: "sid-maybe-yes", label: "🤔→✅ Siddharth's maybe = yes" },
   { action: "sid-maybe-no", label: "🤔→❌ Siddharth's maybe = no" },
   { action: "karan-busy", label: "📆 Karan busy 9–10th" },

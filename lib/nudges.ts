@@ -1,9 +1,10 @@
 // Nudges are worked out on every dashboard load — no background jobs.
 
+import { finalists, picks } from "./pick";
 import type { DateOption, DateVote, Member, NudgeLog, Plan, Swipe, Trip } from "./types";
 import { fmtDay, fmtMonth, fmtRange, istDay } from "./time";
 
-export type NudgeKind = "48h" | "24h" | "12h" | "maybe" | "vote" | "confirm";
+export type NudgeKind = "48h" | "24h" | "12h" | "maybe" | "vote" | "pick" | "confirm";
 
 export interface Nudge {
   member: Member;
@@ -111,6 +112,16 @@ export function computeNudges(args: {
     }
   }
 
+  // 3b. Final pick between plans everyone said yes to.
+  const finals = finalists({ trip, members, plans, swipes });
+  if (finals.length > 1) {
+    const chosen = picks({ trip, members, plans, swipes }, finals);
+    const names = finals.map((p) => p.destination).join(" / ");
+    for (const m of members.filter((x) => !chosen[x.id])) {
+      push(m, "pick", `pick:${finals.map((p) => p.id).sort().join().slice(0, 40)}`, "Hasn't picked a favourite", `${m.name}! 🏆 Everyone said yes to ${names} for "${trip.name}". Tap your favourite so we can lock it: ${tripUrl}/${m.id}/swipe`);
+    }
+  }
+
   // 4. Confirmation once agreed.
   if (trip.status === "agreed") {
     for (const m of members.filter((x) => !x.confirmed_at)) {
@@ -118,7 +129,7 @@ export function computeNudges(args: {
     }
   }
 
-  const order: Record<NudgeKind, number> = { "12h": 0, "24h": 1, "48h": 2, maybe: 3, vote: 4, confirm: 5 };
+  const order: Record<NudgeKind, number> = { "12h": 0, "24h": 1, "48h": 2, maybe: 3, vote: 4, pick: 4, confirm: 5 };
   due.sort((a, b) => order[a.kind] - order[b.kind]);
   const names = new Map(members.map((m) => [m.id, m.name]));
   const sent = nudges

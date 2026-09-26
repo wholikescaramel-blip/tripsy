@@ -7,6 +7,7 @@ import { AppError } from "./errors";
 import { blendPlans, generateIdeas, generatePlans, type PlanSource } from "./gemini";
 import { BUDGET_TIERS, KNOW_BY, VETO_BY_KEY, VETOES, matchHardPasses } from "./options";
 import type { PlanContext, VoteSummary } from "./plan-context";
+import { PICK_MARK, allSwiped, finalists, isPick, pickWinner, picks } from "./pick";
 import { checkPlan } from "./rules";
 import { store } from "./store";
 import type { NewPlan } from "./store/types";
@@ -484,8 +485,22 @@ export async function swipe(slug: string, memberId: string, planId: string, deci
     plan_id: planId,
     member_id: memberId,
     decision,
-    reason: decision === "decline" ? (reason?.slice(0, 140) ?? null) : null,
+    // re-swiping yes keeps a final pick in place
+    reason: decision === "decline" ? (reason?.slice(0, 140) ?? null) : b.swipes.some((s) => s.plan_id === planId && s.member_id === memberId && isPick(s)) ? PICK_MARK : null,
   });
+  return decide(slug, now);
+}
+
+/** Tap a favourite among the plans everyone said yes to. */
+export async function pickFavourite(slug: string, memberId: string, planId: string, now: Date) {
+  const b = await load(slug);
+  memberOf(b, memberId);
+  if (!["voting", "stuck"].includes(b.trip.status)) throw new AppError(409, "Voting is closed.");
+  if (!finalists(b).some((p) => p.id === planId)) throw new AppError(409, "That plan isn't in the final pick.");
+  for (const s of b.swipes.filter((x) => x.member_id === memberId && isPick(x) && x.plan_id !== planId)) {
+    await store.upsertSwipe(b.trip.id, { plan_id: s.plan_id, member_id: memberId, decision: "accept", reason: null });
+  }
+  await store.upsertSwipe(b.trip.id, { plan_id: planId, member_id: memberId, decision: "accept", reason: PICK_MARK });
   return decide(slug, now);
 }
 
@@ -501,23 +516,35 @@ function tally(b: TripBundle, plan: Plan): VoteSummary {
 
 export async function decide(slug: string, now: Date): Promise<{ outcome: string }> {
   const b = await load(slug);
-  const { trip, members, swipes } = b;
+  const { trip, members } = b;
   if (trip.status !== "voting" && trip.status !== "stuck") return { outcome: "none" };
   const active = b.plans.filter((p) => p.status === "active");
   const current = active.filter((p) => p.round === trip.blend_round);
-  const everyoneAccepts = (p: Plan) => members.every((m) => swipes.some((s) => s.plan_id === p.id && s.member_id === m.id && s.decision === "accept"));
-
-  const winner = [...current, ...active.filter((p) => p.round !== trip.blend_round)].find(everyoneAccepts);
-  if (winner) {
+  const agree = async (winner: Plan, how: string) => {
     if (await store.claimTrip(trip.id, { status: trip.status, blend_round: trip.blend_round }, { status: "agreed", agreed_plan_id: winner.id })) {
       await store.updatePlan(winner.id, { status: "agreed" });
-      await log(b, `🎉 AGREED: all ${members.length} said yes to ${winner.destination} (${fmtRange(winner.start_date, winner.end_date)}). Now tap "I'm confirmed" once your leave is sorted.`, "agreed");
+      await log(b, `🎉 AGREED: ${how} ${winner.destination} (${fmtRange(winner.start_date, winner.end_date)}). Now tap "I'm confirmed" once your leave is sorted.`, "agreed");
     }
     return { outcome: "agreed" };
+  };
+
+  // Nobody gets cut off: in voting, nothing is decided until everyone has swiped every plan.
+  const finals = finalists(b);
+  if (finals.length === 1) return agree(finals[0], `all ${members.length} said yes to`);
+  if (finals.length > 1) {
+    const chosen = picks(b, finals);
+    if (members.every((m) => chosen[m.id])) {
+      const winner = pickWinner(finals, chosen);
+      const n = Object.values(chosen).filter((id) => id === winner.id).length;
+      return agree(winner, `${finals.length} plans got a yes from everyone, and ${n} of ${members.length} picked`);
+    }
+    const msg = `🏆 ${finals.map((p) => p.destination).join(" and ")} ${finals.length === 2 ? "both" : "all"} got a yes from everyone! Tap your favourite to settle it.`;
+    if (!b.changes.some((c) => c.kind === "pick" && c.summary === msg)) await log(b, msg, "pick");
+    return { outcome: "picking" };
   }
+
   if (trip.status === "stuck" || !current.length) return { outcome: "waiting" };
-  const allSwiped = members.every((m) => current.every((p) => swipes.some((s) => s.plan_id === p.id && s.member_id === m.id)));
-  if (!allSwiped) return { outcome: "waiting" };
+  if (!allSwiped(b)) return { outcome: "waiting" };
 
   const ranked = active
     .map((p) => tally(b, p))

@@ -93,7 +93,19 @@ export default async function Hub({ params }: PageProps<"/t/[slug]/[memberId]">)
           <p className="mt-1 text-white/85">{view.trip.blendRound > 0 ? "The most-liked bits from both sides. Swipe on it →" : "Right if you'd go, left if not →"}</p>
         </Link>
       )}
-      {status === "voting" && toSwipe.length === 0 && view.currentPlans.length > 0 && (
+      {view.finalPick && (
+        <Link href={`/t/${slug}/${me.id}/swipe`} className="block rounded-3xl bg-sunset p-6 text-white shadow-lift transition active:scale-[0.98]">
+          <p className="text-4xl">🏆</p>
+          <p className="mt-2 font-display text-2xl font-extrabold">
+            {view.finalPick.picks[me.id] ? "You've picked!" : `Everyone said yes to ${view.finalPick.plans.length}. Pick your favourite!`}
+          </p>
+          <p className="mt-1 text-white/85">
+            {view.finalPick.plans.map((p) => p.destination).join(" vs ")}
+            {view.finalPick.waitingOn.length ? ` · waiting on ${view.finalPick.waitingOn.join(", ")}` : ""} →
+          </p>
+        </Link>
+      )}
+      {status === "voting" && !view.finalPick && toSwipe.length === 0 && view.currentPlans.length > 0 && (
         <Card>
           <SectionTitle emoji="🗳️">You&apos;ve voted</SectionTitle>
           <p className="text-sm text-ink-soft">
@@ -111,7 +123,7 @@ export default async function Hub({ params }: PageProps<"/t/[slug]/[memberId]">)
           </p>
         </Card>
       )}
-      {status === "stuck" && toSwipe.length === 0 && (
+      {status === "stuck" && !view.finalPick && toSwipe.length === 0 && (
         <Card>
           <SectionTitle emoji="🤝">Nearly there</SectionTitle>
           <p className="text-sm text-ink-soft">No plan got a yes from everyone, even after the mix. Riya can see the closest one. You can still flip a swipe.</p>

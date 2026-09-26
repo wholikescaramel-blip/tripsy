@@ -2,6 +2,7 @@
 import "server-only";
 
 import type { DatesResult } from "./dates";
+import { finalists, picks } from "./pick";
 import { checkPlan } from "./rules";
 import { assumeMissing, datesFor, everyoneAnswered, isDeadlinePassed, readyToPlan } from "./service";
 import { istDay } from "./time";
@@ -60,6 +61,8 @@ export interface TripView {
   earlierPlans: PlanView[];
   rejectedPlans: PlanView[];
   agreedPlan: PlanView | null;
+  /** Set when 2+ plans got a yes from everyone and people are tapping a favourite. */
+  finalPick: { plans: PlanView[]; picks: Record<string, string>; waitingOn: string[] } | null;
   closest: { plan: PlanView; unhappy: { name: string; reason: string | null }[] } | null;
   changes: ChangeEntry[];
   readyToPlan: boolean;
@@ -122,8 +125,19 @@ export function buildView(b: TripBundle, now: Date, opts: { admin?: boolean } = 
   const active = plans.filter((p) => p.status === "active");
   const agreedPlan = plans.find((p) => p.id === b.trip.agreed_plan_id) ?? null;
 
+  let finalPick: TripView["finalPick"] = null;
+  const finals = ["voting", "stuck"].includes(b.trip.status) ? finalists(b) : [];
+  if (finals.length > 1) {
+    const chosen = picks(b, finals);
+    finalPick = {
+      plans: finals.map((f) => plans.find((p) => p.id === f.id)!),
+      picks: chosen,
+      waitingOn: b.members.filter((m) => !chosen[m.id]).map((m) => m.name),
+    };
+  }
+
   let closest: TripView["closest"] = null;
-  if (b.trip.status === "stuck" && active.length) {
+  if (b.trip.status === "stuck" && active.length && !finalPick) {
     const top = [...active].sort((a, z) => z.accepts.length - a.accepts.length || z.created_at.localeCompare(a.created_at))[0];
     closest = { plan: top, unhappy: top.declines };
   }
@@ -172,6 +186,7 @@ export function buildView(b: TripBundle, now: Date, opts: { admin?: boolean } = 
     earlierPlans: active.filter((p) => !p.isCurrent),
     rejectedPlans: plans.filter((p) => p.status === "rejected" || p.status === "broken"),
     agreedPlan,
+    finalPick,
     closest,
     changes: b.changes,
     readyToPlan: readyToPlan(b, dates, now),

@@ -283,6 +283,25 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
           </div>
         )}
 
+        {view.finalPick && (
+          <div className="mb-4 rounded-2xl border-2 border-coral/30 bg-coral/5 p-4">
+            <p className="font-display text-lg font-bold">🏆 Final pick: everyone said yes to {view.finalPick.plans.length}</p>
+            <ul className="mt-2 flex flex-col gap-1 text-sm">
+              {view.finalPick.plans.map((p) => {
+                const who = view.members.filter((m) => view.finalPick!.picks[m.id] === p.id).map((m) => m.name);
+                return (
+                  <li key={p.id}>
+                    <b>{p.destination}</b>: {who.length} 💖 {who.length ? `(${who.join(", ")})` : ""}
+                  </li>
+                );
+              })}
+            </ul>
+            <p className="mt-2 text-xs text-ink-soft">
+              {view.finalPick.waitingOn.length ? `Waiting on ${view.finalPick.waitingOn.join(", ")}. ` : ""}Most picks wins, a tie goes to the cheaper one. Pick for
+              someone with 👤 in People.
+            </p>
+          </div>
+        )}
         {status === "stuck" && view.closest && (
           <div className="mb-4 rounded-2xl border-2 border-maybe/50 bg-maybe-soft p-4">
             <p className="font-display text-lg font-bold">🤝 Closest plan: {view.closest.plan.destination}</p>

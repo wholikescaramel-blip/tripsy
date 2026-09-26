@@ -1,6 +1,7 @@
 // Demo trip with 5 friends, so every stage can be tested without real users.
 import "server-only";
 
+import { finalists, picks } from "./pick";
 import { store } from "./store";
 import { sampleIdeas } from "./sample-plans";
 import {
@@ -9,6 +10,7 @@ import {
   decide,
   generateInitialPlans,
   load,
+  pickFavourite,
   saveBudget,
   saveHardPasses,
   setConfirmed,
@@ -144,6 +146,13 @@ export async function demoAction(action: string, now: Date) {
       }
       await decide(DEMO_SLUG, now);
       return action === "swipe-yes" ? "Everyone who hadn't swiped said yes." : "Everyone who hadn't swiped voted. It's a split.";
+    }
+    case "pick-others": {
+      const finals = finalists(b);
+      if (finals.length < 2) throw new AppError(409, "No final pick right now.");
+      const chosen = picks(b, finals);
+      for (const [j, m] of b.members.entries()) if (!chosen[m.id] && !m.is_coordinator) await pickFavourite(DEMO_SLUG, m.id, finals[j % finals.length].id, now);
+      return "Everyone except Riya picked a favourite.";
     }
     case "confirm-others": {
       if (b.trip.status !== "agreed") throw new AppError(409, "Nothing agreed yet.");
