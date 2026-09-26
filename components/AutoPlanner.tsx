@@ -29,7 +29,7 @@ export function AutoPlanner({ slug }: { slug: string }) {
     <div className="relative overflow-hidden rounded-3xl bg-ink p-6 text-white shadow-card">
       <div className="shimmer absolute inset-0 opacity-20" />
       <p className="text-4xl animate-wiggle">🧑‍🍳</p>
-      <p className="mt-3 font-display text-xl font-bold">Everyone&apos;s in — cooking up your plans</p>
+      <p className="mt-3 font-display text-xl font-bold">Everyone&apos;s in! Cooking up your plans</p>
       <p className="mt-1 text-sm text-white/70">{error ?? LINES[line]}</p>
     </div>
   );

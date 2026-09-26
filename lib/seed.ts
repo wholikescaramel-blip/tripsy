@@ -96,7 +96,7 @@ export async function demoAction(action: string, now: Date) {
   const b = await load(DEMO_SLUG);
   const byName = (n: string) => {
     const m = b.members.find((x) => x.name === n);
-    if (!m) throw new AppError(409, `${n} isn't on the demo trip any more — reset the demo.`);
+    if (!m) throw new AppError(409, `${n} isn't on the demo trip any more. Reset the demo.`);
     return m;
   };
 
@@ -104,7 +104,7 @@ export async function demoAction(action: string, now: Date) {
     case "fill-preethi":
       await answer(b, byName("Preethi").id, PREETHI, now);
       await generateInitialPlans(DEMO_SLUG, now);
-      return "Preethi answered — everyone's in, plans made.";
+      return "Preethi answered. Everyone's in, plans made.";
     case "karan-busy": {
       // Karan can no longer do the first weekend: breaks any plan on those dates.
       const first = b.dateOptions[0];
@@ -143,7 +143,7 @@ export async function demoAction(action: string, now: Date) {
         }
       }
       await decide(DEMO_SLUG, now);
-      return action === "swipe-yes" ? "Everyone who hadn't swiped said yes." : "Everyone who hadn't swiped voted — split down the middle.";
+      return action === "swipe-yes" ? "Everyone who hadn't swiped said yes." : "Everyone who hadn't swiped voted. It's a split.";
     }
     case "confirm-others": {
       if (b.trip.status !== "agreed") throw new AppError(409, "Nothing agreed yet.");

@@ -5,7 +5,7 @@ import { hasSupabase, isHosted, supabaseKey, supabaseKeyIsSecret, supabaseUrl } 
 import { pingGemini } from "@/lib/gemini";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Setup status — Tripsy" };
+export const metadata = { title: "Setup status | Tripsy" };
 
 type Check = { label: string; ok: boolean | null; detail: string; fix?: string };
 
@@ -23,7 +23,7 @@ async function databaseChecks(): Promise<Check[]> {
       ok: Boolean(supabaseKey) && !supabaseKeyIsSecret,
       detail: supabaseKey
         ? supabaseKeyIsSecret
-          ? `${supabaseKey.name} holds a SECRET key — use the publishable key instead`
+          ? `${supabaseKey.name} holds a SECRET key. Use the publishable key instead`
           : `Found in ${supabaseKey.name} (${supabaseKey.value.slice(0, 15)}…)`
         : "Not set",
       fix: "Add NEXT_PUBLIC_SUPABASE_ANON_KEY = your publishable key (sb_publishable_…) from Supabase → Project Settings → API Keys",
@@ -48,7 +48,7 @@ async function databaseChecks(): Promise<Check[]> {
       detail: error ? error.message : "All 11 tables found and readable",
       fix: denied
         ? "Tables exist but the public key isn't allowed in. In Supabase → SQL Editor → New query, paste supabase/fix-permissions.sql and Run. It keeps your data."
-        : "Run the latest supabase/schema.sql in Supabase → SQL Editor (click “Run without RLS” — the file enables RLS itself).",
+        : "Run the latest supabase/schema.sql in Supabase → SQL Editor (click “Run without RLS”, the file turns RLS on itself).",
     });
     const { error: rpcError } = await sb.rpc("budget_ceiling", { p_trip: "00000000-0000-0000-0000-000000000000" });
     checks.push({
@@ -61,7 +61,7 @@ async function databaseChecks(): Promise<Check[]> {
     checks.push({
       label: "Budgets hidden from the public key",
       ok: Boolean(leak),
-      detail: leak ? "Yes — reading budgets is refused" : "NO — budgets are readable! Run supabase/fix-permissions.sql",
+      detail: leak ? "Yes, budgets can't be read" : "NO, budgets are readable! Run supabase/fix-permissions.sql",
     });
   } catch (err) {
     checks.push({ label: "Database connection", ok: false, detail: err instanceof Error ? err.message : String(err), fix: "Check the Project URL is right and the project isn't paused." });
@@ -90,7 +90,7 @@ export default async function Status() {
       <div>
         <h1 className="font-display text-3xl font-extrabold">Setup status {allGood ? "✅" : "🛠️"}</h1>
         <p className="mt-1 text-ink-soft">
-          {allGood ? "Everything's connected." : "Something needs fixing — see the red rows. After changing Vercel environment variables, redeploy."}
+          {allGood ? "Everything's connected." : "Something needs fixing, see the red rows. Changed Vercel env vars? Redeploy."}
         </p>
         {!hasSupabase && !isHosted && <p className="mt-2 text-sm text-ink-soft">Running locally without a database: data is kept in memory until restart.</p>}
       </div>

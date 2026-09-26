@@ -6,10 +6,9 @@ import { hasSupabase, isHosted } from "@/lib/config";
 export const dynamic = "force-dynamic";
 
 const STEPS = [
-  { emoji: "🔗", title: "Riya lists who's going", text: "Trip name, month, a deadline and names. One link goes in the group chat." },
-  { emoji: "👆", title: "Everyone taps their name", text: "Then a minute of taps: ✅ / 🤔 / ❌ on a few dates, swipe some trip ideas, pick a budget, tap any hard passes." },
-  { emoji: "🤖", title: "The app does the chasing", text: "WhatsApp nudges before the deadline, dates everyone can do, and plans that respect every hard pass." },
-  { emoji: "🃏", title: "Swipe, blend, lock", text: "Everyone swipes the plans. Split? One blended plan. Then everyone confirms their leave." },
+  { emoji: "🃏", text: "Swipe right on trips you'd pick" },
+  { emoji: "🏆", text: "Pick one from your top 3" },
+  { emoji: "🧪", text: "Opinions split? Nothing one blended plan can't solve" },
 ];
 
 const POSTCARDS = [
@@ -50,9 +49,10 @@ export default function Home() {
         <h1 className="font-display text-[2.6rem] leading-[1.02] font-extrabold">
           One trip. Five friends. <span className="text-sunset">Zero chasing.</span>
         </h1>
-        <p className="mt-4 text-lg text-ink-soft">
-          Everyone&apos;s dates keep changing and someone always ends up chasing. Tripsy collects, tracks, plans and decides — so the coordinator
-          doesn&apos;t get blamed.
+        <p className="mt-4 font-display text-xl font-bold italic">Idhar chala mai udhar chala, jaane kaha mai kidhar chala..</p>
+        <p className="mt-2 text-lg text-ink-soft">
+          That&apos;s how every friend group&apos;s trip planning feels. Tripsy collects, tracks, plans and decides, so your trip gets locked in and you
+          get to enjoy!
         </p>
       </section>
 
@@ -63,19 +63,14 @@ export default function Home() {
         <DemoLauncher label="👀 Try the demo with 5 friends" />
       </section>
 
-      <section className="flex flex-col gap-3">
+      <section className="flex flex-col gap-2">
         {STEPS.map((s, i) => (
-          <div key={s.title} className="flex gap-4 rounded-3xl border border-line bg-white/80 p-4 shadow-card animate-rise" style={{ animationDelay: `${0.1 * i}s` }}>
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-sand text-2xl">{s.emoji}</span>
-            <div>
-              <p className="font-display font-bold">{s.title}</p>
-              <p className="text-sm text-ink-soft">{s.text}</p>
-            </div>
-          </div>
+          <p key={s.text} className="flex items-center gap-3 font-display text-lg font-bold animate-rise" style={{ animationDelay: `${0.1 * i}s` }}>
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/80 text-xl shadow-card">{s.emoji}</span>
+            {s.text}
+          </p>
         ))}
       </section>
-
-      <p className="text-center text-xs text-ink-faint">Rough cost estimates only — booking happens after you decide. Budgets stay private. Hard no&apos;s are absolute.</p>
     </main>
   );
 }

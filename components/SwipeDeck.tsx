@@ -58,7 +58,7 @@ export function SwipeDeck({ slug, meId, plans, members }: { slug: string; meId: 
     return (
       <div className="rounded-3xl border border-line bg-white p-5 shadow-card animate-pop">
         <p className="font-display text-xl font-bold">What&apos;s not working about {askReason.destination}?</p>
-        <p className="mt-1 text-sm text-ink-soft">Optional — it helps the blend fix it. Budgets stay private either way.</p>
+        <p className="mt-1 text-sm text-ink-soft">Optional. It helps the next plan fix it.</p>
         <div className="mt-4 flex flex-wrap gap-2">
           {DECLINE_REASONS.map((r) => (
             <button key={r} onClick={() => setReason(r)} className={`rounded-full border px-3.5 py-2 text-sm font-semibold ${reason === r ? "border-ink bg-ink text-white" : "border-line bg-white"}`}>

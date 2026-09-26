@@ -375,10 +375,10 @@ function likedKeys(names: string[]): Set<string> {
 function fitLine(person: PlanContext["people"][number], acts: CatalogActivity[], d: Destination): string {
   if (person.assumed) return `Hasn't answered yet, so this one keeps things easy-going with nothing extreme.`;
   const lower = (t: string) => t[0].toLowerCase() + t.slice(1);
-  if (person.likedIdeas.includes(d.destination)) return `You swiped right on ${d.destination} — here it is, with ${lower(acts[0].title)}.`;
+  if (person.likedIdeas.includes(d.destination)) return `You swiped right on ${d.destination}, so here it is, with ${lower(acts[0].title)}.`;
   const keys = likedKeys(person.likedIdeas);
   const match = acts.find((a) => keys.has(a.key));
-  if (match) return `${match.title} — the kind of thing you liked on your swipes.`;
+  if (match) return `${match.title}, right up your alley.`;
   return `Nothing on your hard-pass list, and plenty of downtime to just hang out.`;
 }
 
@@ -508,7 +508,7 @@ export function sampleIdeas(count = 8): IdeaDraft[] {
     return {
       destination: d.destination,
       region: d.region,
-      pitch: `${d.vibes.slice(0, 2).join(" + ")} — ${d.stay.toLowerCase()}`,
+      pitch: `${d.vibes.slice(0, 2).join(" + ")}, ${d.stay.toLowerCase()}`,
       highlights: highlights.map((a) => a.title),
       emoji: ideaEmoji(d),
       cost_estimate: roundTo(d.access[0].cost + d.perDay * 3, 1000),

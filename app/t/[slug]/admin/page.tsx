@@ -16,7 +16,7 @@ import { fmtDateTime, fmtDay, fmtMonth, fmtRange, inr, toIstLocal } from "@/lib/
 import type { PlanView } from "@/lib/view";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Coordinator dashboard — Tripsy" };
+export const metadata = { title: "Dashboard | Tripsy" };
 
 export default async function Admin({ params, searchParams }: PageProps<"/t/[slug]/admin">) {
   const { slug } = await params;
@@ -98,13 +98,13 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
           <a href={waShare(update)} target="_blank" rel="noreferrer" className="mt-3 flex w-full items-center justify-center rounded-2xl bg-free px-5 py-3 font-bold text-white">
             💬 Post in the group chat
           </a>
-          <p className="mt-2 text-center text-xs text-ink-faint">Opens WhatsApp — pick your trip group. Anyone who still hasn&apos;t swiped shows up under nudges.</p>
+          <p className="mt-2 text-center text-xs text-ink-faint">Opens WhatsApp. Pick your trip group.</p>
         </Card>
       )}
 
       {status === "collecting" && view.everyoneAnswered && view.dates.full.length + view.dates.maybe.length === 0 && (
         <Card className="border-2 !border-maybe/60">
-          <SectionTitle emoji="📅">Everyone&apos;s in — but no date works for all {view.members.length}</SectionTitle>
+          <SectionTitle emoji="📅">Everyone&apos;s in, but no date works for all {view.members.length}</SectionTitle>
           <p className="text-sm text-ink-soft">Plans need one date option everybody can do. Closest ones:</p>
           <ul className="mt-2 flex flex-col gap-2">
             {[...view.dates.options]
@@ -112,7 +112,7 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
               .slice(0, 3)
               .map((o) => (
                 <li key={o.optionId} className="rounded-2xl bg-sand px-3 py-2 text-sm">
-                  <b>{fmtRange(o.start, o.end)}</b> — {o.yes.length + o.maybe.length}/{view.members.length} can go
+                  <b>{fmtRange(o.start, o.end)}</b>: {o.yes.length + o.maybe.length}/{view.members.length} can go
                   {o.no.length > 0 && <span className="text-ink-soft"> · can&apos;t: {o.no.join(", ")}</span>}
                 </li>
               ))}
@@ -137,7 +137,7 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold">{n.member.name}</p>
                     <p className="text-xs font-semibold text-coral-dark">{n.title}</p>
-                    {!n.member.phone.replace(/\D/g, "") && <p className="text-[11px] text-ink-faint">No number saved — you&apos;ll pick them in WhatsApp</p>}
+                    {!n.member.phone.replace(/\D/g, "") && <p className="text-[11px] text-ink-faint">No number saved, pick them in WhatsApp</p>}
                   </div>
                   <NudgeButton slug={slug} adminKey={key} memberId={n.member.id} kind={n.logKey} href={n.waLink} />
                 </div>
@@ -174,7 +174,7 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
             {submitted === view.members.length
               ? "Everyone has answered 🎉"
               : view.deadlinePassed
-                ? "Deadline passed — anyone missing is counted in for every date, no hard passes, average budget."
+                ? "Deadline passed. Anyone missing is counted in for every date, with the group's average budget."
                 : "Anyone missing gets nudged 48h, 24h and 12h before the deadline."}
           </p>
         </div>
@@ -260,7 +260,7 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
             options={view.dates.options.map((o) => ({ id: o.optionId, label: fmtRange(o.start, o.end), works: o.works, votes: o.votes }))}
           />
           <p className="mt-3 text-xs text-ink-soft">
-            For anything else (ideas, budget, hard passes, plan swipes, confirming), open their page from the People list with 👤 — you can do it all as them.
+            For ideas, budget, hard passes, swipes or confirming, tap 👤 next to their name in People and do it as them.
           </p>
         </Card>
       )}
@@ -277,7 +277,7 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
           <div className="flex flex-col gap-3">
             <p className="text-sm text-ink-soft">
               Plans are made automatically once everyone&apos;s answered, or when the deadline passes
-              {view.dates.full.length + view.dates.maybe.length === 0 ? " — as long as one date option works for everyone." : "."}
+              {view.dates.full.length + view.dates.maybe.length === 0 ? ", once one date works for everyone." : "."}
             </p>
             {view.members.length >= 2 && <StartPlanningButton slug={slug} adminKey={key} />}
           </div>
@@ -287,7 +287,7 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
           <div className="mb-4 rounded-2xl border-2 border-maybe/50 bg-maybe-soft p-4">
             <p className="font-display text-lg font-bold">🤝 Closest plan: {view.closest.plan.destination}</p>
             <p className="text-sm text-amber-900">
-              {view.closest.plan.accepts.length}/{view.members.length} said yes, even after the blend. No majority rule — here&apos;s who&apos;s still unhappy:
+              {view.closest.plan.accepts.length}/{view.members.length} said yes, even after the mix. Here&apos;s who&apos;s still not sold:
             </p>
             <ul className="mt-2 flex flex-col gap-1 text-sm">
               {view.closest.unhappy.map((u) => (
@@ -296,7 +296,7 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
                 </li>
               ))}
             </ul>
-            <p className="mt-2 text-xs text-amber-900">Talk it through — anyone can still flip their swipe, and it locks the moment everyone says yes.</p>
+            <p className="mt-2 text-xs text-amber-900">Sort it out in the group chat. Anyone can still flip their swipe, and it locks once everyone says yes.</p>
           </div>
         )}
 
@@ -323,7 +323,7 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
             <ul className="mt-2 flex flex-col gap-2 text-sm">
               {view.rejectedPlans.map((p) => (
                 <li key={p.id} className="rounded-2xl bg-busy-soft/60 px-3 py-2">
-                  <b>{p.destination}</b> ({fmtRange(p.start_date, p.end_date)}) — {p.status === "broken" ? "broke after a change: " : ""}
+                  <b>{p.destination}</b> ({fmtRange(p.start_date, p.end_date)}): {p.status === "broken" ? "broke after a change: " : ""}
                   {p.status_reason}
                 </li>
               ))}

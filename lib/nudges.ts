@@ -74,12 +74,12 @@ export function computeNudges(args: {
       const link = `${tripUrl}/${m.id}`; // straight to their page, no name-picking
       const msg =
         stage === "48h"
-          ? `Hey ${m.name}! ✈️ "${trip.name}" is coming together for ${month}. Tap your name, say yes/no to a few dates and swipe some trip ideas — 1 minute: ${link} (closes in 2 days)`
+          ? `Hey ${m.name}! ✈️ "${trip.name}" is coming together for ${month}. Tap your name, say yes/no to a few dates and swipe some trip ideas. 1 minute: ${link} (closes in 2 days)`
           : stage === "24h"
             ? `${m.name}, 24 hours left for "${trip.name}"! ⏳ A few taps on dates + swipe some ideas: ${link}`
-            : `Hey ${m.name}, it's ${from} 🙂 Honestly I'd love to not be the one chasing everyone — could you tap in your dates for "${trip.name}" tonight? Only 12 hours left and I don't want us to plan without you. ${link}`;
+            : `Hey ${m.name}, it's ${from} 🙂 Could you tap in your dates for "${trip.name}" tonight? Only 12 hours left and I don't want us to plan without you. ${link}`;
       // Keyed to the deadline, so moving the deadline restarts the 48h/24h/12h reminders.
-      push(m, stage, `${stage}@${trip.deadline.slice(0, 16)}`, stage === "12h" ? `12h left — personal note from ${from}` : `${stage} before deadline`, msg, stage === "12h");
+      push(m, stage, `${stage}@${trip.deadline.slice(0, 16)}`, stage === "12h" ? `12h left, personal note from ${from}` : `${stage} before deadline`, msg, stage === "12h");
     }
   }
 
@@ -107,7 +107,7 @@ export function computeNudges(args: {
       const pending = current.filter((p) => !swipes.some((s) => s.plan_id === p.id && s.member_id === m.id));
       if (!pending.length) continue;
       const what = trip.blend_round ? "the blended plan" : `our top ${pending.length} hot spot${pending.length > 1 ? "s" : ""}`;
-      push(m, "vote", `vote:${trip.blend_round}`, `Hasn't swiped ${what}`, `${m.name}! 🗳️ ${what} for "${trip.name}" ${trip.blend_round || pending.length === 1 ? "is" : "are"} waiting for your swipe — yes or no, takes 30 seconds: ${tripUrl}/${m.id}/swipe`);
+      push(m, "vote", `vote:${trip.blend_round}`, `Hasn't swiped ${what}`, `${m.name}! 🗳️ ${what} for "${trip.name}" ${trip.blend_round || pending.length === 1 ? "is" : "are"} waiting for your swipe. Yes or no, 30 seconds: ${tripUrl}/${m.id}/swipe`);
     }
   }
 
@@ -139,7 +139,7 @@ export function groupUpdateMessage(args: {
   const { tripName, status, blendRound, plans, agreed, tripUrl } = args;
   const inr = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
   if ((status === "agreed" || status === "confirmed") && agreed) {
-    return `🎉 It's happening — "${tripName}" is ${agreed.destination}, ${fmtRange(agreed.start_date, agreed.end_date)}! Tap your name and hit "I'm confirmed" once your leave is sorted: ${tripUrl}`;
+    return `🎉 It's happening! "${tripName}" is ${agreed.destination}, ${fmtRange(agreed.start_date, agreed.end_date)}! Tap your name and hit "I'm confirmed" once your leave is sorted: ${tripUrl}`;
   }
   if (!plans.length || (status !== "voting" && status !== "stuck")) return null;
   if (blendRound > 0) {
@@ -150,7 +150,7 @@ export function groupUpdateMessage(args: {
     .slice(0, 3)
     .map((p, i) => `${i + 1}. ${p.destination} · ${fmtRange(p.start_date, p.end_date)} · ≈ ${inr(p.cost_per_person)}/person`)
     .join("\n");
-  return `🔥 Our top ${Math.min(plans.length, 3)} hot spots for "${tripName}" are in!\n${list}\n\nTap your name and swipe yes/no on each — 30 seconds: ${tripUrl}`;
+  return `🔥 Our top ${Math.min(plans.length, 3)} hot spots for "${tripName}" are in!\n${list}\n\nTap your name and swipe yes/no on each. 30 seconds: ${tripUrl}`;
 }
 
 /** Riya can nudge anyone at any time: the message fits where that person is. */
@@ -165,8 +165,8 @@ export function personalNudge(args: {
   personalUrl: string;
 }): string {
   const { name, from, tripName, status, submitted, swipesPending, confirmed, personalUrl } = args;
-  if (status === "collecting" && !submitted) return `Hey ${name}! It's ${from} 🙂 Got a minute for "${tripName}"? Tap in — a few dates, swipe some ideas, done: ${personalUrl}`;
-  if ((status === "voting" || status === "stuck") && swipesPending > 0) return `${name}! 🗳️ Plans for "${tripName}" are waiting on your swipe — yes or no, 30 seconds: ${personalUrl}/swipe`;
+  if (status === "collecting" && !submitted) return `Hey ${name}! It's ${from} 🙂 Got a minute for "${tripName}"? A few dates, a few swipes, done: ${personalUrl}`;
+  if ((status === "voting" || status === "stuck") && swipesPending > 0) return `${name}! 🗳️ Plans for "${tripName}" are waiting on your swipe. Yes or no, 30 seconds: ${personalUrl}/swipe`;
   if (status === "agreed" && !confirmed) return `${name}, we all said yes to "${tripName}" 🎉 Tap "I'm confirmed" once your leave is sorted: ${personalUrl}`;
   return `Hey ${name}! Here's your link for "${tripName}" ✈️ ${personalUrl}`;
 }

@@ -96,7 +96,7 @@ export function TicketBook({ tripName, plan, receipt, meId, tripUrl }: { tripNam
   const others = ordered.filter((x) => x.p.id !== meId);
 
   const text = [
-    `🎟️ ${tripName} — all ${n} of us said yes`,
+    `🎟️ ${tripName}: all ${n} of us said yes`,
     `🚂 ${plan.destination}, ${fmtRange(plan.start_date, plan.end_date)} · ≈ ${inr(plan.cost_per_person)}/person`,
     ...receipt.people.map((p) => `${p.confirmedAt ? "🟥 CONFIRMED" : "🟦 agreed"} · ${p.name}${p.homeCity ? ` (from ${p.homeCity})` : ""}`),
     receipt.agreedAt ? `🤝 Agreed ${fmtDateTime(receipt.agreedAt)}` : "",
@@ -157,7 +157,7 @@ export function TicketBook({ tripName, plan, receipt, meId, tripUrl }: { tripNam
           {receipt.agreedAt && <>Agreed {fmtDateTime(receipt.agreedAt)} · </>}
           {receipt.frozenAt ? <b>LOCKED {fmtDateTime(receipt.frozenAt)}</b> : "awaiting all confirmations"}
         </p>
-        <p className="mt-1 text-center text-[10px] text-[#7a5a2e]">No majority rule — every single passenger said yes.</p>
+        <p className="mt-1 text-center text-[10px] text-[#7a5a2e]">Every single passenger said yes.</p>
       </div>
 
       <a href={waShare(text)} target="_blank" rel="noreferrer" className="flex w-full items-center justify-center rounded-2xl bg-free px-5 py-3 font-bold text-white">

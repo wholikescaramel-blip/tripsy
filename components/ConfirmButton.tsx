@@ -26,7 +26,7 @@ export function ConfirmButton({ slug, memberId, confirmed }: { slug: string; mem
     <div className="flex flex-col gap-2">
       {confirmed ? (
         <>
-          <div className="rounded-2xl bg-free-soft px-4 py-3 text-center font-semibold text-emerald-900">✅ You&apos;re confirmed — leave sorted</div>
+          <div className="rounded-2xl bg-free-soft px-4 py-3 text-center font-semibold text-emerald-900">✅ You&apos;re confirmed, leave sorted</div>
           <button onClick={toggle} disabled={busy} className="text-sm font-semibold text-ink-soft underline underline-offset-4">
             Oops, not sorted yet
           </button>

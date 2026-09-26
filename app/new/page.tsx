@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { CreateTripForm } from "@/components/CreateTripForm";
 
-export const metadata = { title: "Start a trip — Tripsy" };
+export const metadata = { title: "Start a trip | Tripsy" };
 export const dynamic = "force-dynamic"; // default month & deadline depend on today
 
 export default function NewTrip() {

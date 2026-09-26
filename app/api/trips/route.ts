@@ -16,7 +16,7 @@ export async function POST(req: Request) {
     if (!name) throw new AppError(400, "Give the trip a name.");
     if (!/^\d{4}-\d{2}$/.test(month)) throw new AppError(400, "Pick a month.");
     if (people.length < 2) throw new AppError(400, "Add at least one friend besides you.");
-    if (new Set(people.map((p: { name: string }) => p.name.toLowerCase())).size !== people.length) throw new AppError(400, "Two people have the same name — add a surname.");
+    if (new Set(people.map((p: { name: string }) => p.name.toLowerCase())).size !== people.length) throw new AppError(400, "Two people have the same name. Add a surname.");
     const deadline = fromIstLocal(String(body.deadline ?? ""));
     if (Number.isNaN(deadline.getTime())) throw new AppError(400, "Pick a deadline for answers.");
     if (deadline.getTime() < Date.now()) throw new AppError(400, "The deadline should be in the future.");

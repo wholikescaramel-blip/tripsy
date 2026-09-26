@@ -88,7 +88,7 @@ export function StartPlanningButton({ slug, adminKey }: { slug: string; adminKey
         }}
         className={`${buttonClass("primary")} w-full text-sm`}
       >
-        {busy ? "Cooking up plans…" : "🚀 Everyone's here — start planning"}
+        {busy ? "Cooking up plans…" : "🚀 Everyone's here, start planning"}
       </button>
       {error && <p className="mt-2 text-center text-sm font-semibold text-busy">{error}</p>}
     </div>

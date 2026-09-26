@@ -52,7 +52,7 @@ export function CreateTripForm() {
     const origin = typeof window !== "undefined" ? window.location.origin : "";
     const shareUrl = `${origin}/t/${created.slug}`;
     const adminUrl = `${origin}/t/${created.slug}/admin?key=${created.adminKey}`;
-    const msg = `✈️ ${name} is happening! Tap the link, tap your name, say yes/no to a few dates and swipe some ideas for ${fmtMonth(`${month}-01`)}. Takes 1 min — closes ${fmtDateTime(fromIstLocal(deadline).toISOString())}. ${shareUrl}`;
+    const msg = `✈️ ${name} is happening! Tap the link, tap your name, say yes/no to a few dates and swipe some ideas for ${fmtMonth(`${month}-01`)}. Takes 1 min, closes ${fmtDateTime(fromIstLocal(deadline).toISOString())}. ${shareUrl}`;
     const copy = async (label: string, text: string) => {
       await navigator.clipboard.writeText(text).catch(() => {});
       setCopied(label);
@@ -63,7 +63,7 @@ export function CreateTripForm() {
         <div className="text-center">
           <p className="text-6xl animate-float">🎒</p>
           <h1 className="mt-3 font-display text-3xl font-extrabold">Your trip is live!</h1>
-          <p className="mt-1 text-ink-soft">Drop this one link in the group chat. Everyone taps their name — that&apos;s your last chasing job.</p>
+          <p className="mt-1 text-ink-soft">Drop this link in the group chat. Everyone taps their name. That&apos;s the last time you chase anyone.</p>
         </div>
         <Card>
           <p className="text-xs font-bold tracking-wide text-ink-faint uppercase">Group link</p>
@@ -79,7 +79,7 @@ export function CreateTripForm() {
         </Card>
         <Card tone="ink">
           <p className="text-xs font-bold tracking-wide text-white/60 uppercase">Your dashboard (keep this private)</p>
-          <p className="mt-1 text-sm text-white/80">Bookmark it — nudges, who&apos;s in, dates and swipes all live here.</p>
+          <p className="mt-1 text-sm text-white/80">Bookmark it. Nudges, who&apos;s in, dates and swipes are all here.</p>
           <div className="mt-4 grid grid-cols-2 gap-2">
             <Link href={`/t/${created.slug}/admin?key=${created.adminKey}`} className={`${buttonClass("primary")} text-sm`}>
               Open dashboard
@@ -118,7 +118,7 @@ export function CreateTripForm() {
 
       <Card>
         <p className="font-display text-lg font-bold">Who&apos;s going?</p>
-        <p className="text-sm text-ink-soft">Just names. Numbers are optional — only for one-tap WhatsApp nudges. You can add or remove people later.</p>
+        <p className="text-sm text-ink-soft">Just names. Numbers are optional, they make WhatsApp nudges one tap. Add or remove people any time.</p>
         <div className="mt-4 flex flex-col gap-3">
           {people.map((p, i) => (
             <div key={i} className="flex items-center gap-2">
@@ -147,7 +147,7 @@ export function CreateTripForm() {
             + Add someone
           </button>
         )}
-        <p className="mt-2 text-xs text-ink-faint">The first name is you — the coordinator.</p>
+        <p className="mt-2 text-xs text-ink-faint">The first name is you, the coordinator.</p>
       </Card>
 
       {error && <p className="rounded-2xl bg-busy-soft px-4 py-3 text-sm font-semibold text-rose-800">{error}</p>}

@@ -31,7 +31,7 @@ function memberOf(b: TripBundle, memberId: string) {
 }
 
 function notFrozen(b: TripBundle) {
-  if (b.trip.status === "confirmed") throw new AppError(409, "Everyone confirmed — the plan is frozen 🔒");
+  if (b.trip.status === "confirmed") throw new AppError(409, "Everyone confirmed. The plan is locked 🔒");
 }
 
 export function isDeadlinePassed(b: TripBundle, now: Date) {
@@ -62,7 +62,7 @@ export function readyToPlan(b: TripBundle, dates: DatesResult, now: Date) {
 const log = (b: TripBundle, summary: string, kind = "system", memberId: string | null = null) =>
   store.addChange({ trip_id: b.trip.id, member_id: memberId, kind, summary });
 
-const sourceNote = (s: PlanSource) => (s === "sample" ? " (sample plans — add a Gemini key for real ones)" : "");
+const sourceNote = (s: PlanSource) => (s === "sample" ? " (sample plans, add a Gemini key for real ones)" : "");
 
 // ---------------------------------------------------------------------------
 // 1. Setting up: trip, people, date options
@@ -103,7 +103,7 @@ export async function addPerson(slug: string, rawName: string, phone: string) {
   const name = cleanName(rawName);
   if (!name) throw new AppError(400, "Add a name.");
   if (b.members.length >= 20) throw new AppError(409, "That's a big group! 20 people max.");
-  if (b.members.some((m) => m.name.toLowerCase() === name.toLowerCase())) throw new AppError(409, `${name} is already on the list — add a surname to tell them apart.`);
+  if (b.members.some((m) => m.name.toLowerCase() === name.toLowerCase())) throw new AppError(409, `${name} is already on the list. Add a surname.`);
   const m = await store.addMember(b.trip.id, { name, phone: phone.trim().slice(0, 20) });
   await log(b, `👋 ${name} was added to the trip${b.trip.status !== "collecting" ? " (plans will be re-checked once they answer)" : ""}`, "people", m.id);
   return { memberId: m.id };
@@ -128,7 +128,7 @@ export async function addDateOption(slug: string, start: string, end: string, no
   if (len < 1 || len > 5) throw new AppError(400, "A date option should be 1–5 days.");
   if (b.dateOptions.some((o) => o.start_date === start && o.end_date === end)) throw new AppError(409, "That option is already there.");
   await store.addDateOptions(b.trip.id, [{ start_date: start, end_date: end, added_by: "coordinator" }]);
-  await log(b, `📅 New date option: ${fmtRange(start, end)} — everyone tap yes / no / maybe`, "dates");
+  await log(b, `📅 New date option: ${fmtRange(start, end)} , everyone tap yes / no / maybe`, "dates");
   if (b.trip.status !== "collecting") await reconcile(slug, now);
   return { ok: true };
 }
@@ -148,7 +148,7 @@ export async function removeDateOption(slug: string, optionId: string, now: Date
 export async function setDeadline(slug: string, deadline: Date, now: Date) {
   const b = await load(slug);
   notFrozen(b);
-  if (b.trip.status !== "collecting") throw new AppError(409, "Plans are already made — the answer deadline no longer matters.");
+  if (b.trip.status !== "collecting") throw new AppError(409, "Plans are already made, so the deadline doesn't matter now.");
   if (Number.isNaN(deadline.getTime())) throw new AppError(400, "Pick a date and time.");
   if (deadline.getTime() <= now.getTime()) throw new AppError(400, "The new deadline should be in the future.");
   await store.updateTrip(b.trip.id, { deadline: deadline.toISOString() });
@@ -358,13 +358,13 @@ export async function generateInitialPlans(slug: string, now: Date, force = fals
   if (b.members.length < 2) throw new AppError(409, "Add at least one more person first.");
   const missing = b.members.filter((m) => !m.submitted_at);
   if (force && missing.length && !isDeadlinePassed(b, now)) {
-    throw new AppError(409, `${missing.map((m) => m.name).join(", ")} still ${missing.length > 1 ? "have" : "has"} to answer — nudge them, or wait for the deadline.`);
+    throw new AppError(409, `${missing.map((m) => m.name).join(", ")} still ${missing.length > 1 ? "have" : "has"} to answer. Nudge them or wait for the deadline.`);
   }
-  if (dates.full.length + dates.maybe.length === 0) throw new AppError(409, "No date option works for everyone yet — add another date option or nudge people to update.");
+  if (dates.full.length + dates.maybe.length === 0) throw new AppError(409, "No date works for everyone yet. Add another date or nudge people.");
   if (!(await store.claimTrip(b.trip.id, { status: "collecting" }, { status: "voting", blend_round: 0 }))) return { generated: false };
   b.trip.status = "voting";
   b.trip.blend_round = 0;
-  await log(b, "🧠 Everyone's in — making plans…", "planning");
+  await log(b, "🧠 Everyone's in! Making plans…", "planning");
   try {
     // Planning has started: anyone still missing is now assumed (see assumeMissing).
     const fresh = datesFor(b, now);
@@ -377,7 +377,7 @@ export async function generateInitialPlans(slug: string, now: Date, force = fals
     await log(
       b,
       good.length
-        ? `✨ ${good.length} trip plan${good.length > 1 ? "s are" : " is"} ready — everyone swipe!${sourceNote(source)}`
+        ? `✨ ${good.length} trip plan${good.length > 1 ? "s are" : " is"} ready, everyone swipe!${sourceNote(source)}`
         : "😕 No plan passed everyone's hard passes, budgets and dates. Riya can try again.",
       "plans",
     );
@@ -413,7 +413,7 @@ export async function freshPlans(slug: string, now: Date) {
     ...rejected.map((r) => newPlan(b, r.draft, { status: "rejected", status_reason: r.reason })),
     ...good.map((d) => newPlan(b, d, {})),
   ]);
-  await log(b, `🔄 Riya asked for fresh plans — ${good.length} new ones to swipe${sourceNote(source)}`, "plans");
+  await log(b, `🔄 Riya asked for fresh plans: ${good.length} new ones to swipe${sourceNote(source)}`, "plans");
   return { generated: true };
 }
 
@@ -464,7 +464,7 @@ export async function reconcile(slug: string, now: Date) {
       good[0].destination === plan.destination
         ? `Moved ${plan.destination} to ${fmtRange(good[0].start_date, good[0].end_date)}`
         : `Replaced ${plan.destination} with ${good[0].destination} (${fmtRange(good[0].start_date, good[0].end_date)})`;
-    await log(b, `🔁 ${what} — swipe on it!${sourceNote(source)}`, "replaced");
+    await log(b, `🔁 ${what}. Swipe on it!${sourceNote(source)}`, "replaced");
   }
   if (replaced.length && b.trip.status === "stuck") await store.updateTrip(b.trip.id, { status: "voting" });
   await decide(slug, now);
@@ -526,7 +526,7 @@ export async function decide(slug: string, now: Date): Promise<{ outcome: string
   if (trip.blend_round >= MAX_BLEND_ROUNDS) {
     if (await store.claimTrip(trip.id, { status: "voting", blend_round: trip.blend_round }, { status: "stuck" })) {
       const top = ranked[0];
-      await log(b, `🤝 Still no plan everyone says yes to. Closest: ${top?.plan.destination ?? "—"} (${top?.accepted.length ?? 0}/${members.length} yes). Riya's dashboard shows who's unhappy and why.`, "stuck");
+      await log(b, `🤝 Still no plan everyone says yes to. Closest: ${top?.plan.destination ?? "none"} (${top?.accepted.length ?? 0}/${members.length} yes).`, "stuck");
     }
     return { outcome: "stuck" };
   }
@@ -553,7 +553,7 @@ export async function decide(slug: string, now: Date): Promise<{ outcome: string
     }
     await store.insertPlans([newPlan(b, plan, { kind: "blend", round: next, source_plan_ids: top.map((t) => t.plan.id!) })]);
     const split = top.map((t) => `${t.plan.destination} ${t.accepted.length}–${t.declined.length}`).join(", ");
-    await log(b, `🧪 Split vote (${split}). Here's ONE blended plan with the most-liked bits of each side: ${plan.destination} — everyone swipe on it!${sourceNote(source)}`, "blend");
+    await log(b, `🧪 Split vote (${split}). Here's one mixed plan with the most-liked bits from both sides: ${plan.destination}. Everyone swipe!${sourceNote(source)}`, "blend");
     return { outcome: "blend" };
   }
   await store.updateTrip(trip.id, { status: "stuck" });
@@ -569,11 +569,11 @@ export async function setConfirmed(slug: string, memberId: string, confirmed: bo
   const m = memberOf(b, memberId);
   if (b.trip.status !== "agreed") throw new AppError(409, b.trip.status === "confirmed" ? "Already frozen 🔒" : "Nothing agreed yet.");
   await store.updateMember(memberId, { confirmed_at: confirmed ? new Date().toISOString() : null });
-  await log(b, confirmed ? `${m.name} is confirmed — leave sorted ✅` : `${m.name} un-confirmed (leave not sorted yet)`, "confirm", memberId);
+  await log(b, confirmed ? `${m.name} is confirmed, leave sorted ✅` : `${m.name} un-confirmed (leave not sorted yet)`, "confirm", memberId);
   const others = b.members.filter((x) => x.id !== memberId);
   if (confirmed && others.every((x) => x.confirmed_at)) {
     if (await store.claimTrip(b.trip.id, { status: "agreed" }, { status: "confirmed" })) {
-      await log(b, "🔒 CONFIRMED: everyone's leave is sorted. The plan is frozen — go book it!", "confirmed");
+      await log(b, "🔒 CONFIRMED: everyone's leave is sorted. The plan is locked. Go book it!", "confirmed");
     }
   }
   return { ok: true };
@@ -590,7 +590,7 @@ export async function housekeeping(slug: string, now: Date) {
     const started = b.changes.find((c) => c.kind === "planning")?.created_at;
     if (!started || Date.now() - Date.parse(started) > 90_000) {
       if (await store.claimTrip(b.trip.id, { status: "voting", blend_round: 0 }, { status: "collecting" })) {
-        await log(b, "↻ Plan-making got interrupted — trying again", "planning");
+        await log(b, "↻ Plan-making got stuck, trying again", "planning");
       }
     }
   }

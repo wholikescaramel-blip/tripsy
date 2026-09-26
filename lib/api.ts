@@ -10,7 +10,7 @@ export async function handle(fn: () => Promise<unknown>) {
     if (err instanceof AppError) return NextResponse.json({ error: err.message }, { status: err.status });
     console.error(err);
     // Database errors are safe to show (no keys in them) and make setup problems obvious.
-    const msg = err instanceof Error && err.message.startsWith("Supabase:") ? `${err.message} — open /status to check the setup.` : "Something went wrong. Please try again.";
+    const msg = err instanceof Error && err.message.startsWith("Supabase:") ? `${err.message}. Open /status to check the setup.` : "Something went wrong. Please try again.";
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

@@ -28,14 +28,14 @@ export interface QuickStepsProps {
 const STEPS = [
   { title: "Which dates work?", emoji: "📅", hint: "Tap one answer for each." },
   { title: "Would you go?", emoji: "🃏", hint: "Swipe right if it sounds fun, left if not." },
-  { title: "Budget & home base", emoji: "💸", hint: "Private — nobody else ever sees your budget." },
+  { title: "Budget & home base", emoji: "💸", hint: "Only you see this." },
   { title: "Any hard passes?", emoji: "🙅", hint: "Plans will never include these. Skip if you're easy." },
 ];
 
 async function post(url: string, body: unknown) {
   const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json.error ?? "Couldn't save — check your connection.");
+  if (!res.ok) throw new Error(json.error ?? "Couldn't save. Check your connection.");
   return json;
 }
 
@@ -326,14 +326,14 @@ export function QuickSteps(p: QuickStepsProps) {
                 />
                 {typedMatches.length > 0 && (
                   <p className="mt-2 text-xs font-semibold text-ink-soft">
-                    Got it — also avoiding: {typedMatches.map((k) => `${VETO_BY_KEY[k].emoji} ${VETO_BY_KEY[k].label}`).join(", ")}
+                    Got it, also skipping: {typedMatches.map((k) => `${VETO_BY_KEY[k].emoji} ${VETO_BY_KEY[k].label}`).join(", ")}
                   </p>
                 )}
               </div>
             )}
             <div className="grid grid-cols-2 gap-2 pt-2">
               <button type="button" disabled={busy} onClick={() => finish(true)} className={buttonClass("ghost")}>
-                Nothing — I&apos;m easy
+                Nothing, I&apos;m easy
               </button>
               <button type="button" disabled={busy} onClick={() => finish(false)} className={buttonClass("primary")}>
                 {busy ? "Saving…" : "Done ✓"}
@@ -386,7 +386,7 @@ export function IdeaCard({ idea }: { idea: Idea }) {
             </li>
           ))}
         </ul>
-        <p className="text-[11px] text-ink-faint">Just an idea — the real plan is built from what everyone likes.</p>
+        <p className="text-[11px] text-ink-faint">Just an idea for now.</p>
       </div>
     </article>
   );

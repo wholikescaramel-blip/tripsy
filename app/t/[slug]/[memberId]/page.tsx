@@ -73,9 +73,9 @@ export default async function Hub({ params }: PageProps<"/t/[slug]/[memberId]">)
           <p className="mt-2 font-display text-xl font-bold">You&apos;re in!</p>
           <p className="mt-1 text-sm text-white/70">
             {waitingOn.length
-              ? `Waiting on ${waitingOn.join(", ")}. The app nudges them — you don't have to.`
+              ? `Waiting on ${waitingOn.join(", ")}. Tripsy will nudge them.`
               : view.dates.full.length + view.dates.maybe.length === 0
-                ? "Everyone's answered, but no date works for everyone yet. Riya can add another date option."
+                ? "Everyone's answered, but no date works for all yet. Riya can add another date."
                 : "Plans are on their way."}
           </p>
           {!view.deadlinePassed && waitingOn.length > 0 && (
@@ -89,15 +89,15 @@ export default async function Hub({ params }: PageProps<"/t/[slug]/[memberId]">)
       {(status === "voting" || status === "stuck") && toSwipe.length > 0 && (
         <Link href={`/t/${slug}/${me.id}/swipe`} className="block rounded-3xl bg-sunset p-6 text-white shadow-lift transition active:scale-[0.98]">
           <p className="text-4xl">🃏</p>
-          <p className="mt-2 font-display text-2xl font-extrabold">{view.trip.blendRound > 0 ? "A blended plan is ready!" : `${toSwipe.length} plan${toSwipe.length > 1 ? "s" : ""} to swipe`}</p>
-          <p className="mt-1 text-white/85">{view.trip.blendRound > 0 ? "It mixes the most-liked bits of each side. Swipe on it →" : "Right if you'd go, left if not →"}</p>
+          <p className="mt-2 font-display text-2xl font-extrabold">{view.trip.blendRound > 0 ? "A mixed plan is ready!" : `${toSwipe.length} plan${toSwipe.length > 1 ? "s" : ""} to swipe`}</p>
+          <p className="mt-1 text-white/85">{view.trip.blendRound > 0 ? "The most-liked bits from both sides. Swipe on it →" : "Right if you'd go, left if not →"}</p>
         </Link>
       )}
       {status === "voting" && toSwipe.length === 0 && view.currentPlans.length > 0 && (
         <Card>
           <SectionTitle emoji="🗳️">You&apos;ve voted</SectionTitle>
           <p className="text-sm text-ink-soft">
-            Waiting on {[...new Set(view.currentPlans.flatMap((p) => p.pending))].filter((n) => n !== me.name).join(", ") || "the final count"}. No majority rule — if the group splits, we blend.
+            Waiting on {[...new Set(view.currentPlans.flatMap((p) => p.pending))].filter((n) => n !== me.name).join(", ") || "the final count"}. If the group splits, you get one mixed plan.
           </p>
           <Link href={`/t/${slug}/${me.id}/swipe`} className="mt-3 inline-block text-sm font-semibold text-coral-dark">
             Review my swipes →
@@ -107,14 +107,14 @@ export default async function Hub({ params }: PageProps<"/t/[slug]/[memberId]">)
       {status === "voting" && view.currentPlans.length === 0 && (
         <Card>
           <p className="text-sm text-ink-soft">
-            {view.rejectedPlans.length === 0 ? "🧠 Plans are being made — refresh in a minute." : "No live plans right now — Riya can ask for fresh ones from the dashboard."}
+            {view.rejectedPlans.length === 0 ? "🧠 Making plans. Check back in a minute." : "No plans right now. Riya can ask for fresh ones."}
           </p>
         </Card>
       )}
       {status === "stuck" && toSwipe.length === 0 && (
         <Card>
           <SectionTitle emoji="🤝">Nearly there</SectionTitle>
-          <p className="text-sm text-ink-soft">No plan got a yes from everyone, even after the blend. Riya can see the closest one and what&apos;s holding people back. You can still flip a swipe.</p>
+          <p className="text-sm text-ink-soft">No plan got a yes from everyone, even after the mix. Riya can see the closest one. You can still flip a swipe.</p>
           <Link href={`/t/${slug}/${me.id}/swipe`} className="mt-3 inline-block text-sm font-semibold text-coral-dark">
             Review my swipes →
           </Link>
@@ -136,7 +136,7 @@ export default async function Hub({ params }: PageProps<"/t/[slug]/[memberId]">)
             {status === "agreed" && (
               <div className="mt-4">
                 <ConfirmButton slug={slug} memberId={me.id} confirmed={me.confirmed} />
-                <p className="mt-2 text-center text-xs text-ink-faint">You can still change answers — the group sees each change with a timestamp.</p>
+                <p className="mt-2 text-center text-xs text-ink-faint">You can still change answers. The group will see it.</p>
               </div>
             )}
           </Card>
