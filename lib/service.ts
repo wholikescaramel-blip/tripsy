@@ -239,8 +239,9 @@ export async function saveHardPasses(slug: string, memberId: string, picked: str
     if (removed.length) await log(b, `${prefix}${m.name} dropped hard passes: ${removed.map(label).join(", ")}`, "edit", memberId);
   }
 
-  if (b.trip.status === "collecting") await generateInitialPlans(slug, now).catch((e) => console.error(e));
-  else if (firstTime || added.length || removed.length) await reconcile(slug, now);
+  // Plans are made by the next page load (AutoPlanner shows a loader), not inside this save,
+  // so a slow Gemini call can never cut the save short.
+  if (b.trip.status !== "collecting" && (firstTime || added.length || removed.length)) await reconcile(slug, now);
   return { ok: true, vetoes };
 }
 
@@ -346,6 +347,7 @@ export async function generateInitialPlans(slug: string, now: Date, force = fals
   if (!(await store.claimTrip(b.trip.id, { status: "collecting" }, { status: "voting", blend_round: 0 }))) return { generated: false };
   b.trip.status = "voting";
   b.trip.blend_round = 0;
+  await log(b, "🧠 Everyone's in — making plans…", "planning");
   try {
     // Planning has started: anyone still missing is now assumed (see assumeMissing).
     const fresh = datesFor(b, now);
@@ -565,6 +567,17 @@ export async function setConfirmed(slug: string, memberId: string, confirmed: bo
 
 export async function housekeeping(slug: string, now: Date) {
   const b = await load(slug);
+
+  // Plan-making was cut off (e.g. a serverless timeout) and left the trip with no plans: undo so it retries.
+  if (b.trip.status === "voting" && b.plans.length === 0) {
+    const started = b.changes.find((c) => c.kind === "planning")?.created_at;
+    if (!started || Date.now() - Date.parse(started) > 90_000) {
+      if (await store.claimTrip(b.trip.id, { status: "voting", blend_round: 0 }, { status: "collecting" })) {
+        await log(b, "↻ Plan-making got interrupted — trying again", "planning");
+      }
+    }
+  }
+
   if (!isDeadlinePassed(b, now)) return;
   for (const m of b.members.filter((x) => !x.submitted_at)) {
     if (b.changes.some((c) => c.kind === "assumed" && c.member_id === m.id)) continue;

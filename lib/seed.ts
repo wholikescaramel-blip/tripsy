@@ -7,6 +7,7 @@ import {
   AppError,
   createTrip,
   decide,
+  generateInitialPlans,
   load,
   saveBudget,
   saveHardPasses,
@@ -102,7 +103,8 @@ export async function demoAction(action: string, now: Date) {
   switch (action) {
     case "fill-preethi":
       await answer(b, byName("Preethi").id, PREETHI, now);
-      return "Preethi answered.";
+      await generateInitialPlans(DEMO_SLUG, now);
+      return "Preethi answered — everyone's in, plans made.";
     case "karan-busy": {
       // Karan can no longer do the first weekend: breaks any plan on those dates.
       const first = b.dateOptions[0];

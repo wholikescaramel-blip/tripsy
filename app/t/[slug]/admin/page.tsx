@@ -102,6 +102,25 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
         </Card>
       )}
 
+      {status === "collecting" && view.everyoneAnswered && view.dates.full.length + view.dates.maybe.length === 0 && (
+        <Card className="border-2 !border-maybe/60">
+          <SectionTitle emoji="📅">Everyone&apos;s in — but no date works for all {view.members.length}</SectionTitle>
+          <p className="text-sm text-ink-soft">Plans need one date option everybody can do. Closest ones:</p>
+          <ul className="mt-2 flex flex-col gap-2">
+            {[...view.dates.options]
+              .sort((a, b) => b.yes.length + b.maybe.length - (a.yes.length + a.maybe.length))
+              .slice(0, 3)
+              .map((o) => (
+                <li key={o.optionId} className="rounded-2xl bg-sand px-3 py-2 text-sm">
+                  <b>{fmtRange(o.start, o.end)}</b> — {o.yes.length + o.maybe.length}/{view.members.length} can go
+                  {o.no.length > 0 && <span className="text-ink-soft"> · can&apos;t: {o.no.join(", ")}</span>}
+                </li>
+              ))}
+          </ul>
+          <p className="mt-3 text-sm font-semibold">Fix it: add another date option below, or nudge the people who can&apos;t make it to double-check.</p>
+        </Card>
+      )}
+
       {/* 1. Nudges due now */}
       <Card className={due.length ? "border-2 !border-coral/40" : ""}>
         <SectionTitle emoji="🔔" right={due.length ? <Pill tone="coral">{due.length} due</Pill> : undefined}>

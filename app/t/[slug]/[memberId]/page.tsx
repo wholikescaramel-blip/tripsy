@@ -106,7 +106,9 @@ export default async function Hub({ params }: PageProps<"/t/[slug]/[memberId]">)
       )}
       {status === "voting" && view.currentPlans.length === 0 && (
         <Card>
-          <p className="text-sm text-ink-soft">No live plans right now — Riya can ask for fresh ones from the dashboard.</p>
+          <p className="text-sm text-ink-soft">
+            {view.rejectedPlans.length === 0 ? "🧠 Plans are being made — refresh in a minute." : "No live plans right now — Riya can ask for fresh ones from the dashboard."}
+          </p>
         </Card>
       )}
       {status === "stuck" && toSwipe.length === 0 && (
