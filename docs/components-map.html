@@ -1,0 +1,122 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Tripsy components map</title>
+<style>
+  body{margin:0;background:#fff;font-family:Inter,"Segoe UI",Arial,sans-serif;color:#1f2937}
+  #wrap{position:relative;width:1600px;padding:24px 0 30px}
+  h1{margin:0 0 14px;text-align:center;font-size:17px;font-weight:700}
+  h1 span{font-weight:500;color:#6b7280}
+  #grid{position:relative;margin:0 30px;width:1540px}
+  .hdr{display:flex;height:52px;background:#1f2937;color:#fff;font-size:14px;font-weight:700;letter-spacing:.06em}
+  .hdr div{display:flex;align-items:center;justify-content:center}
+  .row{display:flex;height:150px;border-top:1px solid #e5e7eb}
+  .actor{width:170px;flex:none;background:#1f2937;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;font-size:14px;text-align:center}
+  .actor small{font-weight:400;color:#9ca3af;font-size:11px;margin-top:3px}
+  .cell{flex:1;border-left:1px dashed rgba(0,0,0,.06)}
+  .box{position:absolute;box-sizing:border-box;border:2px solid;border-radius:10px;padding:9px 11px;font-size:12.5px;line-height:1.35;text-align:center;display:flex;flex-direction:column;justify-content:center;background:#fff;z-index:2}
+  .box b{display:block;font-size:13px;margin-bottom:3px}
+  svg{position:absolute;left:0;top:0;z-index:1;overflow:visible}
+  .lbl{font-size:11px;fill:#374151;font-weight:600}
+  .lblbg{fill:#fff}
+  .legend{margin:14px 30px 0;font-size:12px;color:#4b5563;display:flex;gap:28px;justify-content:center}
+</style></head>
+<body><div id="wrap">
+<h1>Section A · Group Trip Planner (Tripsy) · Components Map</h1>
+<div id="grid">
+  <div class="hdr"><div style="width:170px">ACTOR</div><div style="flex:1">TRIGGER</div><div style="flex:1">INPUT</div><div style="flex:1">CONTEXT</div><div style="flex:1">PROCESSING</div><div style="flex:1">OUTPUT</div></div>
+</div>
+<div class="legend">
+  <span>▶ dashed arrow = data / event flow</span>
+  <span style="color:#db2777">▶ pink = split vote loop (one blended plan)</span>
+  <span style="color:#16a34a">▶ green = nudge loop (wa.me, no API key)</span>
+  <span>🔒 budgets never leave Supabase</span>
+</div>
+</div>
+<script>
+const ROWS = [
+  ["Riya", "Coordinator", "#eef2ff"],
+  ["Friends", "(× 4)", "#eff6ff"],
+  ["Trip Planner App", "Next.js on Vercel", "#fefce8"],
+  ["Gemini", "(LLM, free tier)", "#f0fdf4"],
+  ["Supabase", "(Database)", "#fdf2f8"],
+  ["Other API", "WhatsApp wa.me links", "#f5f3ff"],
+];
+const COLS = 5, ACTOR_W = 170, HDR = 52, ROW_H = 150, W = 1540, COL_W = (W - ACTOR_W) / COLS;
+const grid = document.getElementById("grid");
+ROWS.forEach(([n, s, bg]) => {
+  const r = document.createElement("div"); r.className = "row"; r.style.background = bg;
+  r.innerHTML = `<div class="actor">${n}<small>${s}</small></div>` + '<div class="cell"></div>'.repeat(COLS);
+  grid.appendChild(r);
+});
+
+// id: [row, col, color, title, text]
+const BOXES = {
+  A: [0, 0, "#6366f1", "Creates the trip", "Name, month, deadline, friends' names. Drops 1 link in the WhatsApp group"],
+  B: [1, 1, "#3b82f6", "Tap name, 4 quick steps", "Dates ✅ 🤔 ❌ · swipe idea cards (more if they pass on all, up to 15) · budget tier · hard passes"],
+  D: [2, 2, "#ca8a04", "Tracks everyone", "Common dates · deadline defaults (all dates, avg budget) · nudges due at 48h / 24h / 12h"],
+  C: [4, 2, "#db2777", "Stores all answers", "Row-level security: budgets unreadable. Only 'fits?' yes/no + group ceiling come out"],
+  F: [3, 3, "#16a34a", "Writes 3 trip plans (JSON)", "From common dates, liked ideas, hard passes, budget ceiling. Split vote → 1 blended plan"],
+  G: [2, 3, "#ca8a04", "Rule checker (code)", "Throws out any plan that breaks a hard pass, budget or date, and asks again"],
+  H: [1, 3, "#3b82f6", "Swipe on the 3 plans", "Yes / no on each. 2+ with everyone's yes → pick a favourite"],
+  I: [2, 4, "#ca8a04", "Decides", "All yes → lock · split or tied pick → 1 blend · Riya can lock, unlock or ask for fresh plans"],
+  J: [0, 4, "#6366f1", "Train-ticket confirmation", "Everyone confirms leave → plan frozen 🔒. Go book it!"],
+  E: [5, 0, "#7c3aed", "Riya taps 'Send nudge'", "wa.me opens WhatsApp with a pre-filled message. No API key"],
+};
+const pos = {};
+for (const [id, [r, c, color, t, txt]] of Object.entries(BOXES)) {
+  const w = COL_W * 0.84, h = ROW_H * 0.72;
+  const x = ACTOR_W + c * COL_W + (COL_W - w) / 2, y = HDR + r * ROW_H + (ROW_H - h) / 2 + 1;
+  const el = document.createElement("div"); el.className = "box";
+  Object.assign(el.style, { left: x + "px", top: y + "px", width: w + "px", height: h + "px", borderColor: color, boxShadow: `0 2px 0 ${color}22` });
+  el.innerHTML = `<b>${t}</b>${txt}`; grid.appendChild(el);
+  pos[id] = { x, y, w, h, cx: x + w / 2, cy: y + h / 2 };
+}
+
+// [from, to, route, label, color, fromOffset(-1..1), toOffset]
+// route: "hv" horizontal then vertical, "vh" vertical then horizontal, "v" straight vertical
+const EDGES = [
+  ["A", "B", "hv", "one link", "#6b7280"],
+  ["B", "D", "hv", "answers", "#6b7280"],
+  ["D", "C", "v", "save", "#6b7280", -0.35, -0.35],
+  ["C", "F", "hv", "budget ceiling", "#6b7280"],
+  ["D", "F", "vh", "everyone's in", "#6b7280", 0.35],
+  ["D", "E", "hv", "nudge due", "#16a34a"],
+  ["E", "B", "hv", "friend taps link", "#16a34a", 0, -0.35],
+  ["F", "G", "v", "plans", "#6b7280"],
+  ["G", "H", "v", "3 valid plans", "#6b7280"],
+  ["H", "I", "hv", "swipes", "#6b7280", 0, -0.35],
+  ["I", "J", "v", "locked", "#6b7280", 0.35, 0.35],
+  ["I", "F", "vh", "split → blend", "#db2777", 0],
+];
+const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+svg.setAttribute("width", W); svg.setAttribute("height", HDR + ROWS.length * ROW_H);
+svg.innerHTML = `<defs>${["#6b7280", "#16a34a", "#db2777"].map((c) => `<marker id="m${c.slice(1)}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="${c}"/></marker>`).join("")}</defs>`;
+grid.appendChild(svg);
+const labels = [];
+for (const [f, t, route, label, color, fo = 0, to = 0] of EDGES) {
+  const a = pos[f], b = pos[t];
+  let pts;
+  if (route === "v") {
+    const down = b.cy > a.cy;
+    const x1 = a.cx + fo * a.w / 2, x2 = b.cx + to * b.w / 2;
+    pts = [[x1, down ? a.y + a.h : a.y], [x2, down ? b.y : b.y + b.h]];
+  } else if (route === "hv") {
+    const right = b.cx > a.cx, down = b.cy > a.cy;
+    const sx = right ? a.x + a.w : a.x, sy = a.cy + fo * a.h / 2, tx = b.cx + to * b.w / 2;
+    pts = [[sx, sy], [tx, sy], [tx, down ? b.y : b.y + b.h]];
+  } else {
+    const down = b.cy > a.cy, right = b.cx > a.cx;
+    const sx = a.cx + fo * a.w / 2, sy = down ? a.y + a.h : a.y;
+    pts = [[sx, sy], [sx, b.cy], [right ? b.x : b.x + b.w, b.cy]];
+  }
+  const d = pts.map((p, i) => (i ? "L" : "M") + p[0] + "," + p[1]).join(" ");
+  svg.insertAdjacentHTML("beforeend", `<path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#m${color.slice(1)})"/><circle cx="${pts[0][0]}" cy="${pts[0][1]}" r="4.5" fill="#22c55e" stroke="#fff" stroke-width="1.5"/>`);
+  // label on the longest segment
+  let best = 0, bi = 0;
+  for (let i = 1; i < pts.length; i++) { const l = Math.hypot(pts[i][0] - pts[i-1][0], pts[i][1] - pts[i-1][1]); if (l > best) { best = l; bi = i; } }
+  labels.push([(pts[bi][0] + pts[bi-1][0]) / 2, (pts[bi][1] + pts[bi-1][1]) / 2, label, color]);
+}
+for (const [x, y, text, color] of labels) {
+  const w = text.length * 6.2 + 12;
+  svg.insertAdjacentHTML("beforeend", `<rect class="lblbg" x="${x - w/2}" y="${y - 9}" width="${w}" height="18" rx="9" stroke="${color}" stroke-opacity=".35"/><text class="lbl" x="${x}" y="${y + 4}" text-anchor="middle" style="fill:${color === "#6b7280" ? "#374151" : color}">${text}</text>`);
+}
+</script></body></html>
