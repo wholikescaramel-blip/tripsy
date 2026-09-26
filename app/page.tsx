@@ -47,7 +47,7 @@ export default function Home() {
 
       <section className="animate-rise">
         <h1 className="font-display text-[2.6rem] leading-[1.02] font-extrabold">
-          One trip. Five friends. <span className="text-sunset">Zero chasing.</span>
+          Crazy friends. Crazier trips. <span className="text-sunset">Zero chasing.</span>
         </h1>
         <p className="mt-4 font-display text-xl font-bold italic">Idhar chala mai udhar chala, jaane kaha mai kidhar chala..</p>
         <p className="mt-2 text-lg text-ink-soft">
@@ -60,7 +60,7 @@ export default function Home() {
         <ButtonLink href="/new" className="w-full text-lg">
           ✈️ Start a trip
         </ButtonLink>
-        <DemoLauncher label="👀 Try the demo with 5 friends" />
+        <DemoLauncher label="👀 Try the demo" />
       </section>
 
       <section className="flex flex-col gap-2">

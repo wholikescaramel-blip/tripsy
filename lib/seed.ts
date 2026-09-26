@@ -11,13 +11,12 @@ import {
   generateInitialPlans,
   load,
   pickFavourite,
-  saveBudget,
   saveHardPasses,
   setConfirmed,
-  swipeIdea,
   voteDate,
 } from "./service";
-import { istDay } from "./time";
+import { BUDGET_TIERS, KNOW_BY } from "./options";
+import { addDays, istDay } from "./time";
 import type { DateVoteValue, TripBundle } from "./types";
 
 export const DEMO_SLUG = "demo";
@@ -59,12 +58,19 @@ const PEOPLE: { name: string; phone: string; answers?: DemoAnswers }[] = [
 
 const PREETHI: DemoAnswers = { votes: ["yes", "yes", "yes", "no", "yes"], likes: ["North Goa", "Pondicherry", "Alleppey backwaters", "Hampi"], budget: "mid", city: "Chennai", passes: ["trekking"] };
 
+// Writes straight to the store in parallel (one trip load, not one per tap), so the demo opens fast.
 async function answer(b: TripBundle, memberId: string, a: DemoAnswers, now: Date) {
-  for (const [i, o] of b.dateOptions.entries()) {
-    await voteDate(DEMO_SLUG, memberId, o.id, a.votes[i] ?? "yes", "few_days", now);
-  }
-  for (const idea of b.ideas) await swipeIdea(DEMO_SLUG, memberId, idea.id, a.likes.includes(idea.destination));
-  await saveBudget(DEMO_SLUG, memberId, a.budget, a.city, now);
+  const tier = BUDGET_TIERS.find((t) => t.key === a.budget)!;
+  const knownBy = addDays(istDay(now), KNOW_BY[1].days);
+  await Promise.all([
+    ...b.dateOptions.map((o, i) => {
+      const vote = a.votes[i] ?? "yes";
+      return store.upsertDateVote(b.trip.id, { option_id: o.id, member_id: memberId, vote, known_by: vote === "maybe" ? knownBy : null });
+    }),
+    ...b.ideas.map((idea) => store.upsertIdeaSwipe(b.trip.id, { idea_id: idea.id, member_id: memberId, liked: a.likes.includes(idea.destination) })),
+    store.upsertPreferences(b.trip.id, { member_id: memberId, home_city: a.city, vetoes: [], veto_notes: "" }),
+    store.setBudget(memberId, tier.min, tier.max),
+  ]);
   await saveHardPasses(DEMO_SLUG, memberId, a.passes, a.notes ?? "", now);
 }
 
