@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AddPerson, AdminVoteGrid, CopyLink, DateOptionControls, DeadlineControl, FreshPlansButton, NudgeButton, RemovePerson, StartPlanningButton } from "@/components/AdminBits";
+import { AddPerson, AdminVoteGrid, CopyLink, DateOptionControls, DeadlineControl, FreshPlansButton, NudgeButton, PlanOverride, RemovePerson, StartPlanningButton } from "@/components/AdminBits";
 import { TicketBook } from "@/components/Tickets";
 import { AutoPlanner } from "@/components/AutoPlanner";
 import { Countdown } from "@/components/Countdown";
@@ -297,8 +297,7 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
               })}
             </ul>
             <p className="mt-2 text-xs text-ink-soft">
-              {view.finalPick.waitingOn.length ? `Waiting on ${view.finalPick.waitingOn.join(", ")}. ` : ""}Most picks wins, a tie goes to the cheaper one. Pick for
-              someone with 👤 in People.
+              {view.finalPick.waitingOn.length ? `Waiting on ${view.finalPick.waitingOn.join(", ")}. ` : ""}Most picks wins. A tie gets one blended plan. Pick for someone with 👤 in People, or lock one below.
             </p>
           </div>
         )}
@@ -315,14 +314,14 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
                 </li>
               ))}
             </ul>
-            <p className="mt-2 text-xs text-amber-900">Sort it out in the group chat. Anyone can still flip their swipe, and it locks once everyone says yes.</p>
+            <p className="mt-2 text-xs text-amber-900">Anyone can still flip their swipe, and it locks once everyone says yes. Or lock one yourself below.</p>
           </div>
         )}
 
         {view.currentPlans.length > 0 && (
           <div className="flex flex-col gap-3">
             {view.currentPlans.map((p) => (
-              <SwipeRow key={p.id} plan={p} members={view.members} />
+              <SwipeRow key={p.id} plan={p} members={view.members} lock={{ slug, adminKey: key }} />
             ))}
           </div>
         )}
@@ -331,7 +330,7 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
             <summary className="cursor-pointer text-sm font-semibold text-ink-soft">Earlier plans ({view.earlierPlans.length})</summary>
             <div className="mt-3 flex flex-col gap-3">
               {view.earlierPlans.map((p) => (
-                <SwipeRow key={p.id} plan={p} members={view.members} />
+                <SwipeRow key={p.id} plan={p} members={view.members} lock={{ slug, adminKey: key }} />
               ))}
             </div>
           </details>
@@ -349,7 +348,7 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
             </ul>
           </details>
         )}
-        {status !== "collecting" && !frozen && (
+        {(status === "voting" || status === "stuck") && (
           <div className="mt-4">
             <FreshPlansButton slug={slug} adminKey={key} />
           </div>
@@ -360,6 +359,22 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
       {/* 6. Lock */}
       {view.agreedPlan && view.receipt && <TicketBook tripName={view.trip.name} plan={view.agreedPlan} receipt={view.receipt} tripUrl={tripUrl} />}
       {view.agreedPlan && <PlanCard plan={view.agreedPlan} members={members} showVotes compact />}
+      {view.agreedPlan && (
+        <Card>
+          <SectionTitle emoji="🛠️">Not feeling it?</SectionTitle>
+          <p className="mb-3 text-sm text-ink-soft">You can undo the lock any time, even after everyone confirmed.</p>
+          <div className="flex flex-col gap-2">
+            <PlanOverride
+              slug={slug}
+              adminKey={key}
+              mode="reopen"
+              label="🔓 Unlock and reopen the vote"
+              ask={`Unlock ${view.agreedPlan.destination}? Picks and leave confirmations are cleared, swipes stay.`}
+            />
+            <FreshPlansButton slug={slug} adminKey={key} label="🔄 Unlock and get 3 fresh plans" />
+          </div>
+        </Card>
+      )}
       <Card>
         <SectionTitle emoji="🔐">Lock status</SectionTitle>
         <LockStatus view={view} />
@@ -370,7 +385,7 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
   );
 }
 
-function SwipeRow({ plan, members }: { plan: PlanView; members: { id: string; name: string }[] }) {
+function SwipeRow({ plan, members, lock }: { plan: PlanView; members: { id: string; name: string }[]; lock?: { slug: string; adminKey: string } }) {
   return (
     <div className="rounded-2xl border border-line bg-white p-3">
       <div className="flex items-start justify-between gap-2">
@@ -412,6 +427,17 @@ function SwipeRow({ plan, members }: { plan: PlanView; members: { id: string; na
         </ul>
       )}
       {plan.dependsOnMaybe.length > 0 && <p className="mt-2 text-xs font-semibold text-amber-800">🤔 Depends on {plan.dependsOnMaybe.join(" & ")}&apos;s maybe</p>}
+      {lock && (
+        <div className="mt-3">
+          <PlanOverride
+            {...lock}
+            mode="lock"
+            planId={plan.id}
+            label={`🔐 Lock ${plan.destination}`}
+            ask={`Lock ${plan.destination} for the group, even though not everyone said yes?`}
+          />
+        </div>
+      )}
     </div>
   );
 }

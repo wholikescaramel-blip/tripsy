@@ -1,12 +1,13 @@
 import { handle, requireAdmin } from "@/lib/api";
 import { nowFor } from "@/lib/clock";
-import { freshPlans, generateInitialPlans, load, startPlanning } from "@/lib/service";
+import { freshPlans, generateInitialPlans, load, lockPlan, reopenVote, startPlanning } from "@/lib/service";
 
 export const maxDuration = 60;
 
 /** mode "auto": anyone's page can kick this off once everyone's in (no-op otherwise).
  *  mode "start": Riya says everyone's here — plan now.
- *  mode "fresh": Riya asks for 3 new plans. */
+ *  mode "fresh": Riya asks for 3 new plans (works even after locking).
+ *  mode "reopen": Riya unlocks the agreed plan.  mode "lock": Riya locks any plan directly. */
 export async function POST(req: Request, ctx: RouteContext<"/api/t/[slug]/plans">) {
   const { slug } = await ctx.params;
   return handle(async () => {
@@ -20,6 +21,10 @@ export async function POST(req: Request, ctx: RouteContext<"/api/t/[slug]/plans"
     if (body.mode === "fresh") {
       requireAdmin(b.trip.admin_key, body.adminKey);
       return freshPlans(slug, now);
+    }
+    if (body.mode === "reopen" || body.mode === "lock") {
+      requireAdmin(b.trip.admin_key, body.adminKey);
+      return body.mode === "reopen" ? reopenVote(slug) : lockPlan(slug, String(body.planId));
     }
     return generateInitialPlans(slug, now);
   });

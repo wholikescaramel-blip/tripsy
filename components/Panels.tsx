@@ -153,7 +153,11 @@ export function LockStatus({ view }: { view: TripView }) {
       <div className="grid grid-cols-2 gap-2">
         <div className={`rounded-2xl p-3 ${status === "agreed" || status === "confirmed" ? "bg-free-soft" : "bg-sand"}`}>
           <p className="text-xs font-bold text-ink-soft uppercase">Step 1 · Agreed</p>
-          <p className="font-display font-bold">{status === "agreed" || status === "confirmed" ? "✓ All said yes" : "Not yet"}</p>
+          <p className="font-display font-bold">{status === "agreed" || status === "confirmed"
+              ? view.agreedPlan && view.agreedPlan.accepts.length < view.members.length
+                ? `✓ Locked by ${view.members.find((m) => m.isCoordinator)?.name ?? "the coordinator"}`
+                : "✓ All said yes"
+              : "Not yet"}</p>
         </div>
         <div className={`rounded-2xl p-3 ${status === "confirmed" ? "bg-ink text-white" : "bg-sand"}`}>
           <p className={`text-xs font-bold uppercase ${status === "confirmed" ? "text-white/60" : "text-ink-soft"}`}>Step 2 · Confirmed</p>

@@ -36,7 +36,7 @@ export function FreshPlansButton({ slug, adminKey, label = "🔄 Get fresh plans
       <button
         disabled={busy}
         onClick={async () => {
-          if (!confirm("Replace the current plans with 3 new ones? Swipes on the current ones are dropped.")) return;
+          if (!confirm("Swap everything on the table for 3 new plans? Current swipes and any lock are dropped.")) return;
           setBusy(true);
           setError(null);
           const res = await fetch(`/api/t/${slug}/plans`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mode: "fresh", adminKey }) });
@@ -47,6 +47,49 @@ export function FreshPlansButton({ slug, adminKey, label = "🔄 Get fresh plans
         className={`${buttonClass("ghost")} w-full text-sm`}
       >
         {busy ? "Cooking…" : label}
+      </button>
+      {error && <p className="mt-2 text-center text-sm text-busy">{error}</p>}
+    </div>
+  );
+}
+
+/** Coordinator override on the plans: reopen the vote, or lock a plan directly. */
+export function PlanOverride({
+  slug,
+  adminKey,
+  mode,
+  planId,
+  label,
+  ask,
+  tone = "ghost",
+}: {
+  slug: string;
+  adminKey: string;
+  mode: "reopen" | "lock";
+  planId?: string;
+  label: string;
+  ask: string;
+  tone?: "ghost" | "dark";
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div>
+      <button
+        disabled={busy}
+        onClick={async () => {
+          if (!confirm(ask)) return;
+          setBusy(true);
+          setError(null);
+          const res = await fetch(`/api/t/${slug}/plans`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mode, planId, adminKey }) });
+          if (!res.ok) setError((await res.json().catch(() => ({}))).error ?? "Didn't work, try again");
+          setBusy(false);
+          router.refresh();
+        }}
+        className={`${buttonClass(tone)} w-full text-sm`}
+      >
+        {busy ? "One sec…" : label}
       </button>
       {error && <p className="mt-2 text-center text-sm text-busy">{error}</p>}
     </div>

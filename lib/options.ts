@@ -114,3 +114,6 @@ export const DECLINE_REASONS = [
   "Too far / too much travel",
   "Been there already",
 ];
+
+/** Idea cards top up (4 at a time) for anyone who passes on all of them, up to this many per trip. */
+export const MAX_IDEAS = 15;

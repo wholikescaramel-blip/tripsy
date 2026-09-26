@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { BUDGET_TIERS, CITIES, HARD_PASS_KEYS, KNOW_BY, VETO_BY_KEY, matchHardPasses } from "@/lib/options";
+import { BUDGET_TIERS, CITIES, HARD_PASS_KEYS, KNOW_BY, MAX_IDEAS, VETO_BY_KEY, matchHardPasses } from "@/lib/options";
 import { fmtDay, fmtRange, inr } from "@/lib/time";
 import type { DateVoteValue, Idea } from "@/lib/types";
 import { SwipeButtons, Swipeable, type SwipeDir } from "./Swipeable";
@@ -77,10 +77,26 @@ export function QuickSteps(p: QuickStepsProps) {
   // --- step 2: ideas
   const queue = p.ideas.filter((i) => swipes[i.id] === undefined);
   const [fling, setFling] = useState<SwipeDir | null>(null);
+  const likedAny = p.ideas.some((i) => swipes[i.id]);
+  // Said no to everything? Top up with a few more cards (up to MAX_IDEAS) until something clicks.
+  const [moreAt, setMoreAt] = useState<number | null>(null); // ideas.length when we asked for more
+  const [noMore, setNoMore] = useState(p.ideas.length >= MAX_IDEAS);
+  const loadingMore = moreAt === p.ideas.length && !noMore;
+  const askMore = () => {
+    setMoreAt(p.ideas.length);
+    void run(async () => {
+      const out = (await post(`${base}/ideas`, { memberId: p.memberId, more: true })) as { added?: number };
+      if (!out?.added) setNoMore(true);
+      router.refresh();
+    }).then((ok) => !ok && setNoMore(true));
+  };
   const swipeIdea = (idea: Idea, dir: SwipeDir) => {
     setFling(null);
-    setSwipes((x) => ({ ...x, [idea.id]: dir === "right" }));
+    const next = { ...swipes, [idea.id]: dir === "right" };
+    setSwipes(next);
     void run(() => post(`${base}/ideas`, { memberId: p.memberId, ideaId: idea.id, liked: dir === "right" }));
+    const doneAll = p.ideas.every((i) => next[i.id] !== undefined);
+    if (doneAll && !Object.values(next).some(Boolean) && !noMore && queue.length > 0) askMore();
   };
 
   // --- step 3: budget
@@ -131,7 +147,7 @@ export function QuickSteps(p: QuickStepsProps) {
     );
   }
 
-  const canNext = [allVoted, queue.length === 0, !needBudget || Boolean(tier), true][step];
+  const canNext = [allVoted, queue.length === 0 && (likedAny || noMore), !needBudget || Boolean(tier), true][step];
 
   return (
     <div className="flex flex-col gap-5">
@@ -225,10 +241,21 @@ export function QuickSteps(p: QuickStepsProps) {
                 </div>
                 <SwipeButtons onNo={() => setFling("left")} onYes={() => setFling("right")} disabled={fling !== null} />
               </>
+            ) : loadingMore ? (
+              <div className="rounded-3xl border border-line bg-white p-6 text-center shadow-card animate-pop">
+                <p className="text-5xl animate-float">🧭</p>
+                <p className="mt-2 font-display text-xl font-bold">Nothing grabbed you? Fair.</p>
+                <p className="mt-1 text-sm text-ink-soft">Finding a few different ones…</p>
+              </div>
             ) : (
               <div className="rounded-3xl border border-line bg-white p-5 shadow-card">
                 <p className="font-display text-lg font-bold">Your picks</p>
-                <p className="text-sm text-ink-soft">Tap to change your mind.</p>
+                <p className="text-sm text-ink-soft">{likedAny ? "Tap to change your mind." : noMore ? "Nothing clicked, and that's okay. Tap one if you change your mind." : "Like at least one so plans know what you're into."}</p>
+                {!likedAny && !noMore && (
+                  <button type="button" onClick={askMore} className={`${buttonClass("dark")} mt-3 w-full text-sm`}>
+                    🧭 Show me different ones
+                  </button>
+                )}
                 <ul className="mt-3 flex flex-col gap-2">
                   {p.ideas.map((i) => (
                     <li key={i.id}>
@@ -358,7 +385,7 @@ export function QuickSteps(p: QuickStepsProps) {
               </Link>
             )}
             <button type="button" disabled={!canNext || busy} onClick={next} className={`${buttonClass("primary")} flex-1`}>
-              {canNext ? "Next" : ["Answer every date", "Swipe all the ideas", "Pick a budget", ""][step]}
+              {canNext ? "Next" : ["Answer every date", queue.length ? "Swipe all the ideas" : "Like at least one", "Pick a budget", ""][step]}
             </button>
           </div>
         </div>

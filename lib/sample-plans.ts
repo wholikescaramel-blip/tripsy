@@ -499,10 +499,13 @@ function ideaEmoji(d: Destination): string {
 }
 
 /** Destination idea cards for the swipe step (used when there's no Gemini key, and for the demo). */
-export function sampleIdeas(count = 8): IdeaDraft[] {
+export function sampleIdeas(count = 8, avoid: string[] = []): IdeaDraft[] {
   // A spread of trip styles: beach, hills, heritage, backwaters, adventure, city, villa…
   const order = ["North Goa", "Coorg", "Udaipur", "Alleppey backwaters", "Rishikesh", "Pondicherry", "Hampi", "Lonavala villa weekend", "Gokarna", "Jim Corbett"];
-  const picked = order.map((n) => CATALOG.find((c) => c.destination === n)!).filter(Boolean);
+  const skip = new Set(avoid.map((a) => a.toLowerCase()));
+  const picked = [...order.map((n) => CATALOG.find((c) => c.destination === n)!).filter(Boolean), ...CATALOG.filter((c) => !order.includes(c.destination))].filter(
+    (c) => !skip.has(c.destination.toLowerCase()),
+  );
   return picked.slice(0, Math.max(count, 1)).map((d) => {
     const highlights = d.activities.slice(0, 3);
     return {

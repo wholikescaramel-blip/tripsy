@@ -108,7 +108,7 @@ export function computeNudges(args: {
       const pending = current.filter((p) => !swipes.some((s) => s.plan_id === p.id && s.member_id === m.id));
       if (!pending.length) continue;
       const what = trip.blend_round ? "the blended plan" : `our top ${pending.length} hot spot${pending.length > 1 ? "s" : ""}`;
-      push(m, "vote", `vote:${trip.blend_round}`, `Hasn't swiped ${what}`, `${m.name}! 🗳️ ${what} for "${trip.name}" ${trip.blend_round || pending.length === 1 ? "is" : "are"} waiting for your swipe. Yes or no, 30 seconds: ${tripUrl}/${m.id}/swipe`);
+      push(m, "vote", `vote:${trip.blend_round}:${current[0]?.id.slice(0, 8)}`, `Hasn't swiped ${what}`, `${m.name}! 🗳️ ${what} for "${trip.name}" ${trip.blend_round || pending.length === 1 ? "is" : "are"} waiting for your swipe. Yes or no, 30 seconds: ${tripUrl}/${m.id}/swipe`);
     }
   }
 

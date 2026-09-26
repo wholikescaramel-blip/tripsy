@@ -172,10 +172,11 @@ const IDEA_SCHEMA = {
 };
 
 /** Destination idea cards people swipe on first (so nobody fills in a "what do you like" form). */
-export async function generateIdeas(month: string, count = 8): Promise<{ ideas: IdeaDraft[]; source: PlanSource }> {
-  if (!geminiConfigured()) return { ideas: sampleIdeas(count), source: "sample" };
+export async function generateIdeas(month: string, count = 8, avoid: string[] = []): Promise<{ ideas: IdeaDraft[]; source: PlanSource }> {
+  if (!geminiConfigured()) return { ideas: sampleIdeas(count, avoid), source: "sample" };
   const prompt = `Suggest ${count} very different 2–4 day group trip ideas in India that are good in ${fmtMonth(month)} (think about the weather that month).
-Mix styles: beach, hills, heritage, backwaters/nature, adventure, city/food, wildlife, a chill villa weekend. Keep it realistic for friends travelling from different Indian cities.`;
+Mix styles: beach, hills, heritage, backwaters/nature, adventure, city/food, wildlife, a chill villa weekend. Keep it realistic for friends travelling from different Indian cities.
+${avoid.length ? `Someone passed on all of these, so suggest different places and styles: ${avoid.join(", ")}.` : ""}`;
   try {
     const out = (await callGemini(prompt, IDEA_SCHEMA)) as { ideas: IdeaDraft[] };
     const ideas = out.ideas.slice(0, count).map((i) => ({
@@ -184,9 +185,10 @@ Mix styles: beach, hills, heritage, backwaters/nature, adventure, city/food, wil
       highlights: (i.highlights ?? []).slice(0, 3).map(String),
       tags: (i.tags ?? []).filter((t) => VETO_BY_KEY[t]),
     }));
-    return ideas.length >= 4 ? { ideas, source: "gemini" } : { ideas: sampleIdeas(count), source: "sample" };
+    const min = Math.min(4, count);
+    return ideas.length >= min ? { ideas, source: "gemini" } : { ideas: sampleIdeas(count, avoid), source: "sample" };
   } catch {
-    return { ideas: sampleIdeas(count), source: "sample" };
+    return { ideas: sampleIdeas(count, avoid), source: "sample" };
   }
 }
 
@@ -236,7 +238,7 @@ export async function blendPlans(
     accepted_by: v.accepted,
     declined_by: v.declined.map((d) => (d.reason ? `${d.name} (${d.reason})` : d.name)),
   }));
-  const prompt = `The group is split — no plan was accepted by everyone. This is blend round ${round} of 2.
+  const prompt = `The group is split between these plans (see who accepted, declined or picked which, and why). This is the one blend round (round ${round}).
 Create ONE blended plan that combines the most-liked parts of each side so everyone gets something they want.
 Look at who accepted and declined each plan (and why) and fix those reasons. It can be a new destination if that serves both sides better.
 ${feedback.length ? `Earlier attempts were rejected by the rule checker for: ${feedback.join(" | ")}.` : ""}

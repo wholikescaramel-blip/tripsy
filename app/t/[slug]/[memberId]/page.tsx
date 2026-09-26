@@ -126,7 +126,7 @@ export default async function Hub({ params }: PageProps<"/t/[slug]/[memberId]">)
       {status === "stuck" && !view.finalPick && toSwipe.length === 0 && (
         <Card>
           <SectionTitle emoji="🤝">Nearly there</SectionTitle>
-          <p className="text-sm text-ink-soft">No plan got a yes from everyone, even after the mix. Riya can see the closest one. You can still flip a swipe.</p>
+          <p className="text-sm text-ink-soft">No plan has everyone&apos;s yes right now. You can still flip a swipe, or Riya can lock one.</p>
           <Link href={`/t/${slug}/${me.id}/swipe`} className="mt-3 inline-block text-sm font-semibold text-coral-dark">
             Review my swipes →
           </Link>
@@ -137,7 +137,7 @@ export default async function Hub({ params }: PageProps<"/t/[slug]/[memberId]">)
         <section className="flex flex-col gap-4">
           <div className="text-center">
             <p className="text-5xl animate-float">{frozen ? "🔒" : "🎉"}</p>
-            <h2 className="mt-2 font-display text-2xl font-extrabold">{frozen ? "It's official. Go book it!" : "Everyone said yes!"}</h2>
+            <h2 className="mt-2 font-display text-2xl font-extrabold">{frozen ? "It's official. Go book it!" : view.agreedPlan.accepts.length < view.members.length ? "Locked in!" : "Everyone said yes!"}</h2>
             <p className="text-sm text-ink-soft">{frozen ? "Everyone's leave is sorted. The plan is frozen." : "Last step: tap below once your leave is sorted."}</p>
           </div>
           {view.receipt && <TicketBook tripName={view.trip.name} plan={view.agreedPlan} receipt={view.receipt} meId={me.id} />}

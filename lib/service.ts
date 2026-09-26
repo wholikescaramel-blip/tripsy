@@ -5,9 +5,9 @@ import "server-only";
 import { dateResults, suggestDateOptions, type DatesResult } from "./dates";
 import { AppError } from "./errors";
 import { blendPlans, generateIdeas, generatePlans, type PlanSource } from "./gemini";
-import { BUDGET_TIERS, KNOW_BY, VETO_BY_KEY, VETOES, matchHardPasses } from "./options";
+import { BUDGET_TIERS, KNOW_BY, MAX_IDEAS, VETO_BY_KEY, VETOES, matchHardPasses } from "./options";
 import type { PlanContext, VoteSummary } from "./plan-context";
-import { PICK_MARK, allSwiped, finalists, isPick, pickWinner, picks } from "./pick";
+import { PICK_MARK, allSwiped, finalists, isPick, picks } from "./pick";
 import { checkPlan } from "./rules";
 import { store } from "./store";
 import type { NewPlan } from "./store/types";
@@ -213,6 +213,24 @@ export async function swipeIdea(slug: string, memberId: string, ideaId: string, 
   return { ok: true };
 }
 
+/** Someone said no to every idea: add a few more (up to MAX_IDEAS on the trip) so they can find at least one. */
+export async function moreIdeas(slug: string, memberId: string) {
+  const b = await load(slug);
+  notFrozen(b);
+  memberOf(b, memberId);
+  const mine = b.ideaSwipes.filter((s) => s.member_id === memberId);
+  const left = MAX_IDEAS - b.ideas.length;
+  if (left <= 0 || mine.some((s) => s.liked)) return { added: 0 };
+  const { ideas } = await generateIdeas(b.trip.target_month, Math.min(4, left), b.ideas.map((i) => i.destination));
+  // Another request may have added some meanwhile.
+  const fresh = await load(slug);
+  const have = new Set(fresh.ideas.map((i) => i.destination.toLowerCase()));
+  const add = ideas.filter((i) => !have.has(i.destination.toLowerCase())).slice(0, MAX_IDEAS - fresh.ideas.length);
+  if (fresh.ideas.length > b.ideas.length || !add.length) return { added: 0 };
+  await store.insertIdeas(b.trip.id, add);
+  return { added: add.length };
+}
+
 export async function saveBudget(slug: string, memberId: string, tierKey: string, homeCity: string, now: Date) {
   const b = await load(slug);
   notFrozen(b);
@@ -399,22 +417,22 @@ export async function startPlanning(slug: string, now: Date) {
 export async function freshPlans(slug: string, now: Date) {
   const b = await load(slug);
   if (b.trip.status === "collecting") return startPlanning(slug, now);
-  notFrozen(b);
   const dates = datesFor(b, now);
-  const current = b.plans.filter((p) => p.status === "active" && p.round === b.trip.blend_round);
-  const { good, rejected, source } = await producePlans(b, dates, 3, current.map((p) => p.destination), [], now);
+  const live = b.plans.filter((p) => p.status === "active" || p.status === "agreed");
+  const { good, rejected, source } = await producePlans(b, dates, 3, b.plans.map((p) => p.destination), [], now);
   if (!good.length) throw new AppError(422, "Couldn't find plans that pass everyone's rules. Try adding a date option.");
-  for (const p of current) await store.updatePlan(p.id, { status: "superseded", status_reason: "Riya asked for fresh plans" });
-  if (b.trip.agreed_plan_id) {
-    await store.updatePlan(b.trip.agreed_plan_id, { status: "superseded" });
-    for (const m of b.members) if (m.confirmed_at) await store.updateMember(m.id, { confirmed_at: null });
-  }
-  await store.updateTrip(b.trip.id, { status: "voting", agreed_plan_id: null });
+  await Promise.all([
+    ...live.map((p) => store.updatePlan(p.id, { status: "superseded", status_reason: `${coordinatorName(b)} asked for fresh plans` })),
+    ...b.members.filter((m) => m.confirmed_at).map((m) => store.updateMember(m.id, { confirmed_at: null })),
+  ]);
+  // A fresh set starts over: round 0 again, so a split can get its blend.
+  await store.updateTrip(b.trip.id, { status: "voting", agreed_plan_id: null, blend_round: 0 });
+  b.trip.blend_round = 0;
   await store.insertPlans([
     ...rejected.map((r) => newPlan(b, r.draft, { status: "rejected", status_reason: r.reason })),
     ...good.map((d) => newPlan(b, d, {})),
   ]);
-  await log(b, `🔄 Riya asked for fresh plans: ${good.length} new ones to swipe${sourceNote(source)}`, "plans");
+  await log(b, `🔄 ${coordinatorName(b)} asked for fresh plans: ${good.length} new ones to swipe${sourceNote(source)}`, "plans");
   return { generated: true };
 }
 
@@ -534,9 +552,23 @@ export async function decide(slug: string, now: Date): Promise<{ outcome: string
   if (finals.length > 1) {
     const chosen = picks(b, finals);
     if (members.every((m) => chosen[m.id])) {
-      const winner = pickWinner(finals, chosen);
-      const n = Object.values(chosen).filter((id) => id === winner.id).length;
-      return agree(winner, `${finals.length} plans got a yes from everyone, and ${n} of ${members.length} picked`);
+      const count = (p: Plan) => members.filter((m) => chosen[m.id] === p.id).length;
+      const best = Math.max(...finals.map(count));
+      const leaders = finals.filter((p) => count(p) === best);
+      if (leaders.length === 1) return agree(leaders[0], `${finals.length} plans got a yes from everyone, and ${best} of ${members.length} picked`);
+
+      // Tied pick: that's a split, so it gets one blended plan like any other split.
+      const sides: VoteSummary[] = leaders.slice(0, 2).map((p, i, two) => ({
+        plan: p,
+        accepted: members.filter((m) => chosen[m.id] === p.id).map((m) => m.name),
+        declined: members.filter((m) => chosen[m.id] === two[1 - i].id).map((m) => ({ name: m.name, reason: `picked ${two[1 - i].destination} instead` })),
+      }));
+      const tie = sides.map((t) => `${t.plan.destination} ${t.accepted.length}`).join(" vs ");
+      if (trip.status === "voting" && trip.blend_round < MAX_BLEND_ROUNDS) return blendRound(b, sides, now, `Tied pick (${tie})`);
+      const msg = `⚖️ Still tied (${tie}). Change a pick to break it, or ${coordinatorName(b)} can lock one.`;
+      if (trip.status === "voting") await store.claimTrip(trip.id, { status: "voting", blend_round: trip.blend_round }, { status: "stuck" });
+      if (!b.changes.some((c) => c.kind === "stuck" && c.summary === msg)) await log(b, msg, "stuck");
+      return { outcome: "tied" };
     }
     const msg = `🏆 ${finals.map((p) => p.destination).join(" and ")} ${finals.length === 2 ? "both" : "all"} got a yes from everyone! Tap your favourite to settle it.`;
     if (!b.changes.some((c) => c.kind === "pick" && c.summary === msg)) await log(b, msg, "pick");
@@ -557,13 +589,20 @@ export async function decide(slug: string, now: Date): Promise<{ outcome: string
     }
     return { outcome: "stuck" };
   }
+  const top = ranked.slice(0, 2);
+  return blendRound(b, top, now, `Split vote (${top.map((t) => `${t.plan.destination} ${t.accepted.length}–${t.declined.length}`).join(", ")})`);
+}
 
+const coordinatorName = (b: TripBundle) => b.members.find((m) => m.is_coordinator)?.name ?? "the coordinator";
+
+/** One mixed plan from the two sides of a split. */
+async function blendRound(b: TripBundle, top: VoteSummary[], now: Date, why: string): Promise<{ outcome: string }> {
+  const { trip } = b;
   const next = trip.blend_round + 1;
   if (!(await store.claimTrip(trip.id, { status: "voting", blend_round: trip.blend_round }, { blend_round: next }))) return { outcome: "waiting" };
   b.trip.blend_round = next;
 
   const dates = datesFor(b, now);
-  const top = ranked.slice(0, 2);
   const ceiling = await store.budgetCeiling(trip.id);
   const ctx = planContext(b, dates, ceiling, now);
   const feedback: string[] = [];
@@ -579,13 +618,47 @@ export async function decide(slug: string, now: Date): Promise<{ outcome: string
       continue;
     }
     await store.insertPlans([newPlan(b, plan, { kind: "blend", round: next, source_plan_ids: top.map((t) => t.plan.id!) })]);
-    const split = top.map((t) => `${t.plan.destination} ${t.accepted.length}–${t.declined.length}`).join(", ");
-    await log(b, `🧪 Split vote (${split}). Here's one mixed plan with the most-liked bits from both sides: ${plan.destination}. Everyone swipe!${sourceNote(source)}`, "blend");
+    await log(b, `🧪 ${why}. Here's one mixed plan with the best bits of both: ${plan.destination}. Everyone swipe!${sourceNote(source)}`, "blend");
     return { outcome: "blend" };
   }
   await store.updateTrip(trip.id, { status: "stuck" });
-  await log(b, "😕 Couldn't build a blend that respects everyone's hard passes and budgets. Riya's dashboard has the closest plan.", "stuck");
+  await log(b, `😕 Couldn't build a blend that respects everyone's hard passes and budgets. ${coordinatorName(b)} can lock a plan or ask for fresh ones.`, "stuck");
   return { outcome: "stuck" };
+}
+
+// ---------------------------------------------------------------------------
+// Coordinator overrides
+
+/** Undo the lock: the plan goes back on the table, picks and leave confirmations are cleared. */
+export async function reopenVote(slug: string) {
+  const b = await load(slug);
+  if (b.trip.status !== "agreed" && b.trip.status !== "confirmed") throw new AppError(409, "Nothing is locked right now.");
+  const agreed = b.plans.find((p) => p.id === b.trip.agreed_plan_id);
+  await Promise.all([
+    agreed ? store.updatePlan(agreed.id, { status: "active" }) : null,
+    ...b.swipes.filter(isPick).map((s) => store.upsertSwipe(b.trip.id, { plan_id: s.plan_id, member_id: s.member_id, decision: "accept", reason: null })),
+    ...b.members.filter((m) => m.confirmed_at).map((m) => store.updateMember(m.id, { confirmed_at: null })),
+  ]);
+  await store.updateTrip(b.trip.id, { status: "stuck", agreed_plan_id: null });
+  await log(b, `🔓 ${coordinatorName(b)} reopened the vote${agreed ? ` on ${agreed.destination}` : ""}. Flip your swipes or pick again.`, "reopened");
+  return { ok: true };
+}
+
+/** The coordinator settles it: lock any plan still on the table. */
+export async function lockPlan(slug: string, planId: string) {
+  const b = await load(slug);
+  if (b.trip.status === "collecting") throw new AppError(409, "No plans yet.");
+  const plan = b.plans.find((p) => p.id === planId);
+  if (!plan || (plan.status !== "active" && plan.status !== "agreed")) throw new AppError(409, "That plan isn't on the table any more.");
+  const prev = b.trip.agreed_plan_id && b.trip.agreed_plan_id !== planId ? b.trip.agreed_plan_id : null;
+  await Promise.all([
+    prev ? store.updatePlan(prev, { status: "active" }) : null,
+    store.updatePlan(planId, { status: "agreed" }),
+    ...(prev ? b.members.filter((m) => m.confirmed_at).map((m) => store.updateMember(m.id, { confirmed_at: null })) : []),
+  ]);
+  await store.updateTrip(b.trip.id, { status: prev || b.trip.status !== "confirmed" ? "agreed" : "confirmed", agreed_plan_id: planId });
+  await log(b, `🔐 ${coordinatorName(b)} locked ${plan.destination} (${fmtRange(plan.start_date, plan.end_date)}). Tap "I'm confirmed" once your leave is sorted.`, "agreed");
+  return { ok: true };
 }
 
 // ---------------------------------------------------------------------------

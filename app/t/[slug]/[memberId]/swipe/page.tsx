@@ -21,7 +21,7 @@ export default async function SwipePage({ params }: PageProps<"/t/[slug]/[member
         <Link href={`/t/${slug}/${memberId}`} className="text-sm font-semibold text-ink-soft">
           ← Trip
         </Link>
-        {view.trip.blendRound > 0 && <span className="rounded-full bg-plum/10 px-3 py-1 text-xs font-bold text-plum">🧪 Blend round {view.trip.blendRound} of 2</span>}
+        {view.trip.blendRound > 0 && <span className="rounded-full bg-plum/10 px-3 py-1 text-xs font-bold text-plum">🧪 Blended plan</span>}
       </div>
       {view.finalPick && <FinalPick slug={slug} meId={memberId} {...view.finalPick} />}
       <h1 className="font-display text-3xl font-extrabold">{view.finalPick ? "Your swipes" : "Would you go? 🃏"}</h1>
