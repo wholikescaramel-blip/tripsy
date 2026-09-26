@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AddPerson, CopyLink, DateOptionControls, DeadlineControl, FreshPlansButton, NudgeButton, RemovePerson, StartPlanningButton } from "@/components/AdminBits";
+import { AddPerson, AdminVoteGrid, CopyLink, DateOptionControls, DeadlineControl, FreshPlansButton, NudgeButton, RemovePerson, StartPlanningButton } from "@/components/AdminBits";
 import { TicketBook } from "@/components/Tickets";
 import { AutoPlanner } from "@/components/AutoPlanner";
 import { Countdown } from "@/components/Countdown";
@@ -201,6 +201,9 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
                   </p>
                   {m.submitted ? <span className="text-xs font-semibold text-emerald-700">✓ all done</span> : m.assumed ? <Pill tone="maybe">counted in</Pill> : <StepChips m={m} totals={view.totals} />}
                 </div>
+                <Link href={`/t/${slug}/${m.id}`} aria-label={`Open as ${m.name}`} title={`Open as ${m.name}`} className="shrink-0 rounded-full bg-sand px-2.5 py-1.5 text-xs font-bold">
+                  👤
+                </Link>
                 {!m.isCoordinator && !frozen && (
                   <>
                     <a href={waLink(m.phone ?? "", invite)} target="_blank" rel="noreferrer" className="shrink-0 rounded-full bg-free-soft px-3 py-1.5 text-xs font-bold text-emerald-800">
@@ -239,13 +242,28 @@ export default async function Admin({ params, searchParams }: PageProps<"/t/[slu
 
       {/* 4. Dates */}
       <div>
-        <DatesPanel view={view} showGrid />
+        <DatesPanel view={view} />
         {!frozen && (
           <div className="px-2">
             <DateOptionControls slug={slug} adminKey={key} options={view.dates.options.map((o) => ({ id: o.optionId, label: fmtRange(o.start, o.end) }))} />
           </div>
         )}
       </div>
+
+      {!frozen && (
+        <Card>
+          <SectionTitle emoji="✏️">Change answers for someone</SectionTitle>
+          <AdminVoteGrid
+            slug={slug}
+            adminKey={key}
+            members={members}
+            options={view.dates.options.map((o) => ({ id: o.optionId, label: fmtRange(o.start, o.end), works: o.works, votes: o.votes }))}
+          />
+          <p className="mt-3 text-xs text-ink-soft">
+            For anything else (ideas, budget, hard passes, plan swipes, confirming), open their page from the People list with 👤 — you can do it all as them.
+          </p>
+        </Card>
+      )}
 
       <IdeasPanel view={view} />
 

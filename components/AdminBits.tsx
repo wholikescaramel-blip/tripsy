@@ -249,3 +249,77 @@ export function DeadlineControl({ slug, adminKey, current }: { slug: string; adm
     </div>
   );
 }
+
+type Vote = "yes" | "maybe" | "no" | "pending" | "assumed";
+const NEXT: Record<Vote, "yes" | "maybe" | "no"> = { pending: "yes", assumed: "yes", yes: "maybe", maybe: "no", no: "yes" };
+const ICON: Record<Vote, string> = { yes: "✅", maybe: "🤔", no: "❌", pending: "…", assumed: "✅" };
+
+/** Tap a cell to change someone's date answer (✅ → 🤔 → ❌). Logged as "on their behalf". */
+export function AdminVoteGrid({
+  slug,
+  adminKey,
+  members,
+  options,
+}: {
+  slug: string;
+  adminKey: string;
+  members: { id: string; name: string }[];
+  options: { id: string; label: string; works: string; votes: Record<string, Vote> }[];
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div>
+      <div className="no-scrollbar overflow-x-auto">
+        <table className="w-full text-center text-sm">
+          <thead>
+            <tr>
+              <th className="py-1 pr-2 text-left text-xs font-bold text-ink-soft">Dates</th>
+              {members.map((m) => (
+                <th key={m.id} className="px-1 py-1 text-xs font-bold text-ink-soft">
+                  {m.name.slice(0, 6)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {options.map((o) => (
+              <tr key={o.id} className={o.works === "everyone" ? "bg-free-soft" : o.works === "maybe" ? "bg-maybe-soft" : ""}>
+                <td className="py-1.5 pr-2 text-left text-xs font-bold whitespace-nowrap">{o.label}</td>
+                {members.map((m) => {
+                  const v = o.votes[m.id] ?? "pending";
+                  const id = `${o.id}|${m.id}`;
+                  return (
+                    <td key={m.id} className="px-1 py-1">
+                      <button
+                        disabled={busy !== null}
+                        onClick={async () => {
+                          setBusy(id);
+                          setError(null);
+                          try {
+                            await adminPost(`/api/t/${slug}/dates`, { adminKey, memberId: m.id, optionId: o.id, vote: NEXT[v] });
+                            router.refresh();
+                          } catch (err) {
+                            setError(err instanceof Error ? err.message : String(err));
+                          }
+                          setBusy(null);
+                        }}
+                        className="h-9 w-9 rounded-xl border border-line bg-white text-base transition active:scale-90 disabled:opacity-50"
+                        aria-label={`${m.name}, ${o.label}: ${v}. Tap to change`}
+                      >
+                        {busy === id ? "…" : ICON[v]}
+                      </button>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-2 text-xs text-ink-faint">Tap to change someone&apos;s answer (✅ → 🤔 → ❌). The group sees it as changed by you, on their behalf.</p>
+      {error && <p className="mt-1 text-sm font-semibold text-busy">{error}</p>}
+    </div>
+  );
+}

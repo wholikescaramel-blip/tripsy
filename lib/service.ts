@@ -186,6 +186,23 @@ export async function voteDate(slug: string, memberId: string, optionId: string,
   return { ok: true };
 }
 
+/** The coordinator changes someone's date answer (e.g. they got persuaded). Always shown to the group. */
+export async function voteDateOnBehalf(slug: string, memberId: string, optionId: string, vote: DateVoteValue, now: Date) {
+  const b = await load(slug);
+  notFrozen(b);
+  const m = memberOf(b, memberId);
+  const o = b.dateOptions.find((x) => x.id === optionId);
+  if (!o) throw new AppError(404, "That date option was removed.");
+  const before = b.dateVotes.find((v) => v.option_id === optionId && v.member_id === memberId)?.vote;
+  if (before === vote) return { ok: true };
+  const by = b.members.find((x) => x.is_coordinator)?.name ?? "The coordinator";
+  const icon = { yes: "✅", maybe: "🤔", no: "❌" }[vote];
+  await store.upsertDateVote(b.trip.id, { option_id: optionId, member_id: memberId, vote, known_by: vote === "maybe" ? addDays(istDay(now), 7) : null });
+  await log(b, `✏️ ${by} set ${m.name}'s answer for ${fmtRange(o.start_date, o.end_date)} to ${icon} (on their behalf)`, "edit", memberId);
+  if (b.trip.status !== "collecting") await reconcile(slug, now);
+  return { ok: true };
+}
+
 export async function swipeIdea(slug: string, memberId: string, ideaId: string, liked: boolean) {
   const b = await load(slug);
   notFrozen(b);
